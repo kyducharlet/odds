@@ -72,8 +72,12 @@ class SlidingMKDE(BaseDetector):
         pass
 
     def eval_update(self, x):
-        raise NotImplementedError("Oops! This has yet to be implemented.")
-        pass
+        scores = np.zeros(len(x))
+        for i in range(len(x)):
+            scores[i] = self.score_samples(x[i].reshape(1, -1))
+            self.update(x[i].reshape(1, -1))
+        return scores, self
+
 
     def copy(self):
         model_bis = SlidingMKDE(self.kernel, self.bandwidth, self.win_size)

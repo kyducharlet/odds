@@ -70,8 +70,11 @@ class ILOF(BaseDetector):
         pass
 
     def eval_update(self, x):
-        if len(x.shape) != 2 or x.shape[1] != self.p:
-            raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.p, x.shape))
+        scores = np.zeros(len(x))
+        for i in range(len(x)):
+            self.update(x[i])
+            scores = self.lofs[max(list(self.lofs.keys()))]
+        return scores
 
     def __select_with_window__(self, x):
         x_windowed = x[-self.win_size:]
