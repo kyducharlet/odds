@@ -40,8 +40,8 @@ def search_kNN(points, index, k):
     kthNN_distance = sorted_distances[k]  # we take the (k+1)th since the point indexed by index is in the dataset
     kNN = np.array(list(points.keys()))[arg_sorted_distances[np.where(sorted_distances <= kthNN_distance)]]
     sorted_distances = sorted_distances[np.where(sorted_distances <= kthNN_distance)]
-    kNN = kNN[np.where(kNN != index)]  # we remove the point indexed by index
-    sorted_distances = sorted_distances[np.where(kNN != index)]
+    sorted_distances = sorted_distances[np.where(kNN != index)]  # we remove the point indexed by index
+    kNN = kNN[np.where(kNN != index)]
     return {index_: sorted_distances[i] for i, index_ in enumerate(kNN)}
 
 
@@ -49,7 +49,7 @@ def search_reverse_kNN(points, k_distances, index):
     x = np.array(list(points.values()))
     indices = np.array(list(points.keys()))
     distances = np.linalg.norm(x - points[index], axis=1)
-    kRNN = indices[np.where(distances <= list(k_distances.values))]
+    kRNN = indices[np.where(distances <= list(k_distances.values()))]
     return kRNN[kRNN != index]
 
 
@@ -59,7 +59,7 @@ def compute_k_distance(points, index, kNNs):
 
 
 def compute_rd(points, index_p, index_o, k_distances):
-    return np.max(np.linalg.norm(points[index_p] - points[index_o]), k_distances[index_o])
+    return np.max([np.linalg.norm(points[index_p] - points[index_o]), k_distances[index_o]])
 
 
 def compute_lrd(rds, index):
@@ -75,6 +75,7 @@ def compute_lof(lrds, kNNs, index):
 def update_when_adding(points, index_new, x_new, kNNs, k_distances, rds, lrds, lofs, k):
     points[index_new] = x_new
     kNNs[index_new] = search_kNN(points, index_new, k)
+    k_distances[index_new] = compute_k_distance(points, index_new, kNNs)
     rds[index_new] = {o: compute_rd(points, index_new, o, k_distances) for o in list(kNNs[index_new].keys())}
     kdist_to_update = search_reverse_kNN(points, k_distances, index_new)
     for index_p in kdist_to_update:
@@ -144,3 +145,4 @@ def update_when_removing(points, index_dead, kNNs, k_distances, rds, lrds, lofs,
         lof_to_update.extend(search_reverse_kNN(points, k_distances, index_p).tolist())
     for index_p in lof_to_update:
         lofs[index_p] = compute_lof(lrds, kNNs, index_p)
+    return kNNs, k_distances, rds, lrds, lofs
