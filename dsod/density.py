@@ -1,11 +1,13 @@
 import numpy as np
+from typing import Union
 
 from .base import BaseDetector, NotFittedError
 from .utils import search_kNN, compute_k_distance, compute_rd, compute_lrd, compute_lof, update_when_adding, update_when_removing
 
 
 class ILOF(BaseDetector):
-    def __init__(self, k: int, win_size=None):
+    def __init__(self, k: int, threshold=1.1, win_size: Union[type(None), int] = None):
+        self.threshold = threshold
         self.k = k
         self.win_size = win_size
         if self.win_size is None:
@@ -62,19 +64,17 @@ class ILOF(BaseDetector):
         return lofs
 
     def decision_function(self, x):
-        raise NotImplementedError("Oops! This has yet to be implemented.")
-        pass
+        return self.threshold - self.score_samples(x)
 
     def predict(self, x):
-        raise NotImplementedError("Oops! This has yet to be implemented.")
-        pass
+        return np.where(self.decision_function(x) < 0, -1, 1)
 
     def eval_update(self, x):
-        scores = np.zeros(len(x))
+        preds = np.zeros(len(x))
         for i in range(len(x)):
             self.update(x[i])
-            scores = self.lofs[max(list(self.lofs.keys()))]
-        return scores
+            preds[i] = -1 if self.threshold - self.lofs[max(list(self.lofs.keys()))] < 0 else 1
+        return preds
 
     def __select_with_window__(self, x):
         x_windowed = x[-self.win_size:]
@@ -118,7 +118,3 @@ class ILOF(BaseDetector):
         model_bis.lofs = self.lofs
         model_bis.p = self.p
         return model_bis
-
-
-class MILOF(BaseDetector):
-    pass
