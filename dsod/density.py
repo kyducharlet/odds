@@ -72,7 +72,7 @@ class ILOF(BaseDetector):
     def eval_update(self, x):
         preds = np.zeros(len(x))
         for i in range(len(x)):
-            self.update(x[i])
+            self.update(x[i].reshape(1, -1))
             preds[i] = -1 if self.threshold - self.lofs[max(list(self.lofs.keys()))] < 0 else 1
         return preds
 

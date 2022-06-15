@@ -104,12 +104,13 @@ def update_when_adding(points, index_new, x_new, kNNs, k_distances, rds, lrds, l
                 lof_to_update.extend(search_reverse_kNN(points, k_distances, index_q).tolist())
         lrds[index_p] = compute_lrd(rds, index_p)
         lrds[index_new] = compute_lrd(rds, index_new)
-        lof_to_update = [index_p]
         lof_to_update.extend(search_reverse_kNN(points, k_distances, index_p).tolist())
         """ Update lof """
         for index_q in np.unique(lof_to_update):
             lofs[index_q] = compute_lof(lrds, kNNs, index_q)
-        lofs[index_new] = compute_lof(lrds, kNNs, index_new)
+    if lrds.get(index_new) is None:
+        lrds[index_new] = compute_lrd(rds, index_new)
+    lofs[index_new] = compute_lof(lrds, kNNs, index_new)
     return kNNs, k_distances, rds, lrds, lofs
 
 

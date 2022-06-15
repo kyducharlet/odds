@@ -55,7 +55,7 @@ class SlidingMKDE(BaseDetector):
             raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.p, x.shape))
         if self.kc is None:
             raise NotFittedError("This SlidingMKDE instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.")
-        self.kc = np.concatenate(self.kc[len(self.kc) - self.win_size + len(x):], x[-self.win_size:])
+        self.kc = np.concatenate([self.kc[len(self.kc) - self.win_size + len(x):], x[-self.win_size:]])
         self.bsi, self.bdsi = self.be(self.kc)
 
     def score_samples(self, x):
@@ -121,7 +121,7 @@ class SimpleChristoffel(BaseDetector):
         elif len(x.shape) != 2 or x.shape[1] != self.__dict__["fit_shape"][1]:
             raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.__dict__["fit_shape"][1], x.shape))
         # return self.moments_matrix.score_samples(x)
-        return self.moments_matrix.score_samples(x) / self.__dict__["offset_"]
+        return self.moments_matrix.score_samples(x.reshape(-1, self.__dict__["fit_shape"][1])) / self.__dict__["offset_"]
 
     def decision_function(self, x):
         return 1 - self.score_samples(x)
@@ -129,21 +129,21 @@ class SimpleChristoffel(BaseDetector):
     def predict(self, x):
         if self.__dict__.get("offset_") is None:
             raise NotFittedError("This Christoffel instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.")
-        scores = self.score_samples(x)
+        scores = self.score_samples(x.reshape(-1, self.__dict__["fit_shape"][1]))
         return np.where(scores > 1, -1, 1)
 
     def fit_predict(self, x):
-        self.fit(x)
-        return self.predict(x)
+        self.fit(x.reshape(-1, self.__dict__["fit_shape"][1]))
+        return self.predict(x.reshape(-1, self.__dict__["fit_shape"][1]))
 
     def eval_update(self, x):
-        if len(x.shape) != 2 or x.shape[1] != self.__dict__["fit_shape"]:
-            raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.__dict__["fit_shape"], x.shape))
+        if len(x.shape) != 2 or x.shape[1] != self.__dict__["fit_shape"][1]:
+            raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.__dict__["fit_shape"][1], x.shape))
         res = np.zeros(len(x))
         for i, xx in enumerate(x):
             xx.reshape(1, -1)
-            res[i] = self.predict(xx)
-            self.update(xx)
+            res[i] = self.predict(xx.reshape(-1, self.__dict__["fit_shape"][1]))
+            self.update(xx.reshape(-1, self.__dict__["fit_shape"][1]))
         return res
 
     def copy(self):
