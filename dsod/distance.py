@@ -55,7 +55,7 @@ class OSMCOD(BaseDetector):
         return 1 / (1 + res)
 
     def decision_function(self, x):
-        return (1 / (1 + self.k)) - self.score_samples(x)
+        return self.__offset__ - self.score_samples(x)
 
     def predict(self, x):
         preds = np.zeros(len(x))
@@ -77,12 +77,19 @@ class OSMCOD(BaseDetector):
                         preds[i] = -1
         return preds
 
-    def eval_update(self, x):
+    def predict_update(self, x):
         preds = np.zeros(len(x))
         for i, xx in enumerate(x):
             preds[i] = self.predict(xx.reshape(1, -1))
             self.update(xx.reshape(1, -1))
         return preds
+
+    def eval_update(self, x):
+        evals = np.zeros(len(x))
+        for i, xx in enumerate(x):
+            evals[i] = self.decision_function(xx.reshape(1, -1))
+            self.update(xx.reshape(1, -1))
+        return evals
 
     def __insert__(self, x):
         point = MTreePoint(x)
@@ -146,17 +153,24 @@ class OSCOD(BaseDetector):
         return 1 / (1 + res)
 
     def decision_function(self, x):
-        return (1 / (1 + self.k)) - self.score_samples(x)
+        return self.__offset__ - self.score_samples(x)
 
     def predict(self, x):
         return np.where(self.decision_function(x) < 0, -1, 1)
 
-    def eval_update(self, x):
+    def predict_update(self, x):
         preds = np.zeros(len(x))
         for i, xx in enumerate(x):
             preds[i] = self.predict(xx.reshape(1, -1))
             self.update(xx.reshape(1, -1))
         return preds
+
+    def eval_update(self, x):
+        evals = np.zeros(len(x))
+        for i, xx in enumerate(x):
+            evals[i] = self.decision_function(xx.reshape(1, -1))
+            self.update(xx.reshape(1, -1))
+        return evals
 
     def __insert__(self, x):
         point = self.point_type(x)

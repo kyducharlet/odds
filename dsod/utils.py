@@ -22,7 +22,7 @@ IMPLEMENTED_KERNEL_FUNCTIONS = {
 
 
 def scott_rule(x):
-    ev = np.std(x, axis=0) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
+    ev = np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
     return np.diag(1 / ev), np.product(1 / ev)
 
 
@@ -328,13 +328,13 @@ class MTree:
                     r2 = max(r2, dist2) if type(child) == self.point_type else max(r2, dist2 + child.radius)
         else:  # all points are the same
             for child in self.children:
-                c = child.children if type(child) == MTree else child
+                c = child.center if type(child) == MTree else child
                 if c == c1:
-                    ch1[c] = 0
+                    ch1[child] = 0
                 elif c == c2 or len(ch2) < len(ch1):
-                    ch2[c] = 0
+                    ch2[child] = 0
                 else:
-                    ch1[c] = 0
+                    ch1[child] = 0
         return ch1, r1, ch2, r2
 
     def __get_root__(self):

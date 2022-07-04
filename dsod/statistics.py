@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Union
 from scipy.special import comb
-from scipy.optimize import least_squares
+from scipy.optimize import curve_fit
 
 from .base import BaseDetector, NotFittedError
 from .utils import IMPLEMENTED_KERNEL_FUNCTIONS, IMPLEMENTED_BANDWIDTH_ESTIMATORS
@@ -76,6 +76,13 @@ class SlidingMKDE(BaseDetector):
         return np.where(self.decision_function(x) < 0, -1, 1)
 
     def eval_update(self, x):
+        evals = np.zeros(len(x))
+        for i in range(len(x)):
+            evals[i] = self.decision_function(x[i].reshape(1, -1))
+            self.update(x[i].reshape(1, -1))
+        return evals
+
+    def predict_update(self, x):
         preds = np.zeros(len(x))
         for i in range(len(x)):
             preds[i] = self.predict(x[i].reshape(1, -1))
@@ -92,18 +99,26 @@ class SlidingMKDE(BaseDetector):
 
 
 class SimpleChristoffel(BaseDetector):
-    def __init__(self, d: int = 2, r: float = 0.5, forget_factor: Union[float, type(None)] = None):
+    def __init__(self, d: int = 2, r: float = 0.5, forget_factor: Union[float, type(None)] = None, reg="1"):
         assert 0 < r <= 1
         self.d = d
         self.r = r
         self.moments_matrix = MomentsMatrix(d, forget_factor=forget_factor)
+        self.reg = reg
 
     def fit(self, x: np.ndarray):
         if len(x.shape) != 2:
             raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
         self.__dict__["fit_shape"] = x.shape
         self.moments_matrix.fit(x)
-        self.__dict__["offset_"] = self.r * self.d * comb(self.d + x.shape[1], self.d)
+        if self.reg == "1":
+            self.__dict__["regularizer"] = self.r * self.d * comb(self.d + x.shape[1], self.d)
+        elif self.reg == "2":
+            self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 1)
+        elif self.reg == "3":
+            self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 2)
+        else:
+            raise ValueError("reg should be one of 1, 2 or 3")
         return self
 
     def update(self, x):
@@ -121,13 +136,13 @@ class SimpleChristoffel(BaseDetector):
         elif len(x.shape) != 2 or x.shape[1] != self.__dict__["fit_shape"][1]:
             raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.__dict__["fit_shape"][1], x.shape))
         # return self.moments_matrix.score_samples(x)
-        return self.moments_matrix.score_samples(x.reshape(-1, self.__dict__["fit_shape"][1])) / self.__dict__["offset_"]
+        return self.moments_matrix.score_samples(x.reshape(-1, self.__dict__["fit_shape"][1])) / self.__dict__["regularizer"]
 
     def decision_function(self, x):
         return 1 - self.score_samples(x)
 
     def predict(self, x):
-        if self.__dict__.get("offset_") is None:
+        if self.__dict__.get("regularize") is None:
             raise NotFittedError("This Christoffel instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.")
         scores = self.score_samples(x.reshape(-1, self.__dict__["fit_shape"][1]))
         return np.where(scores > 1, -1, 1)
@@ -139,28 +154,40 @@ class SimpleChristoffel(BaseDetector):
     def eval_update(self, x):
         if len(x.shape) != 2 or x.shape[1] != self.__dict__["fit_shape"][1]:
             raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.__dict__["fit_shape"][1], x.shape))
-        res = np.zeros(len(x))
+        evals = np.zeros(len(x))
         for i, xx in enumerate(x):
             xx.reshape(1, -1)
-            res[i] = self.predict(xx.reshape(-1, self.__dict__["fit_shape"][1]))
+            evals[i] = self.decision_function(xx.reshape(-1, self.__dict__["fit_shape"][1]))
             self.update(xx.reshape(-1, self.__dict__["fit_shape"][1]))
-        return res
+        return evals
+
+    def predict_update(self, x):
+        if len(x.shape) != 2 or x.shape[1] != self.__dict__["fit_shape"][1]:
+            raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.__dict__["fit_shape"][1], x.shape))
+        preds = np.zeros(len(x))
+        for i, xx in enumerate(x):
+            xx.reshape(1, -1)
+            preds[i] = self.predict(xx.reshape(-1, self.__dict__["fit_shape"][1]))
+            self.update(xx.reshape(-1, self.__dict__["fit_shape"][1]))
+        return preds
 
     def copy(self):
         c_bis = SimpleChristoffel(d=self.d, r=self.r)
         c_bis.moments_matrix = self.moments_matrix.copy()
         if self.__dict__.get("fit_shape") is not None:
             c_bis.__dict__["fit_shape"] = self.__dict__["fit_shape"]
-        if self.__dict__.get("offset_") is not None:
-            c_bis.__dict__["offset_"] = self.__dict__["offset_"]
+        if self.__dict__.get("regularizer") is not None:
+            c_bis.__dict__["regularizer"]  = self.__dict__["regularizer"]
         return c_bis
 
 
 class DyCG(BaseDetector):
-    def __init__(self, degrees: np.ndarray = np.array(range(2, 9)), r: float = 0.5, forget_factor: Union[float, type(None)] = None):
+    def __init__(self, degrees: np.ndarray = np.array(range(2, 9)), r: float = 0.5, forget_factor: Union[float, type(None)] = None,
+                 decision="sign_poly_2_reg", reg="1"):
         assert len(degrees) > 1
         self.degrees = degrees
-        self.models = [SimpleChristoffel(d=d, r=r, forget_factor=forget_factor) for d in degrees]
+        self.models = [SimpleChristoffel(d=d, r=r, forget_factor=forget_factor, reg=reg) for d in degrees]
+        self.decision = decision
 
     def fit(self, x):
         if len(x.shape) != 2:
@@ -178,17 +205,22 @@ class DyCG(BaseDetector):
     def score_samples(self, x):
         if len(x.shape) != 2 or x.shape[1] != self.p:
             raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.p, x.shape))
-        scores = np.zeros((len(x), len(self.models)))
         score = np.zeros((len(x), 1))
         for i, d in enumerate(x):
             d_ = d.reshape(1, -1)
-            scores[i] = [m.score_samples(d_) for m in self.models]
-            s_diff = np.diff(scores[i]) / np.diff(self.degrees)
-            score[i] = least_squares(
-                lambda x, t, y: x[0] * t + x[1] - y,
-                x0=np.array([1, 0]),
-                args=(s_diff, self.degrees[:-1])
-            ).x[0]
+            scores = np.array([m.score_samples(d_)[0] for m in self.models])
+            s_diff = np.diff(scores) / np.diff(self.degrees)
+            if self.decision == "sign_poly_2_reg":
+                score[i] = curve_fit(
+                    lambda x, a, b: a * x ** 2 + b,
+                    xdata=self.degrees,
+                    ydata=scores,
+                )[0][0]
+            elif self.decision == "mean_growth_rate":
+                score[i] = np.mean(s_diff / scores[:-1])
+                # score[i] = np.mean((scores - scores[0])[1:])
+            else:
+                raise ValueError("decision should be one of sign_poly_2_reg or mean_growth_rate, but we should have told you before :p")
         return score
 
     def decision_function(self, x):
@@ -204,12 +236,22 @@ class DyCG(BaseDetector):
     def eval_update(self, x):
         if len(x.shape) != 2 or x.shape[1] != self.p:
             raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.p, x.shape))
-        decisions = np.zeros(len(x))
+        evals = np.zeros(len(x))
         for i, d in enumerate(x):
             d_ = d.reshape(1, -1)
-            decisions[0] = self.predict(d_)
+            evals[i] = self.decision_function(d_)
             self.update(d_)
-        return decisions
+        return evals
+
+    def predict_update(self, x):
+        if len(x.shape) != 2 or x.shape[1] != self.p:
+            raise ValueError("The expected array shape: (N, {}) do not match the given array shape: {}".format(self.p, x.shape))
+        preds = np.zeros(len(x))
+        for i, d in enumerate(x):
+            d_ = d.reshape(1, -1)
+            preds[i] = self.predict(d_)
+            self.update(d_)
+        return preds
 
     def copy(self):
         mc_bis = DyCG(degrees=self.degrees)

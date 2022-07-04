@@ -36,7 +36,9 @@ class LevelsetPlotter(BasePlotter):
         x1, x2 = np.meshgrid(X1, X2)
         x3 = np.c_[x1.ravel(), x2.ravel()]
         X3 = self.model.score_samples(x3).reshape(x1.shape)
-        levels = np.exp(np.linspace(np.log(np.min(X3)), np.log(np.max(X3)), 11))
+        # levels = np.exp(np.linspace(np.log(np.min(X3)), np.log(np.max(X3)), 11))
+        percentiles = [25, 50, 75, 90, 95, 98, 99, 99.9]
+        levels = [np.percentile(X3, p) for p in percentiles]
         cs = ax.contour(X1, X2, X3, levels=list(levels[1:-1]))
         ax.clabel(cs, inline=1)
         if save:

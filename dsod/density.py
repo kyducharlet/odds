@@ -70,6 +70,13 @@ class ILOF(BaseDetector):
         return np.where(self.decision_function(x) < 0, -1, 1)
 
     def eval_update(self, x):
+        evals = np.zeros(len(x))
+        for i in range(len(x)):
+            self.update(x[i].reshape(1, -1))
+            evals[i] = self.threshold - self.lofs[max(list(self.lofs.keys()))]
+        return evals
+
+    def predict_update(self, x):
         preds = np.zeros(len(x))
         for i in range(len(x)):
             self.update(x[i].reshape(1, -1))
