@@ -147,70 +147,6 @@ def split_data(data, split_pos):
     return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
 
 
-"""def plot(methods, x_train, x_test, y_test, savename):
-    fig, ax = plt.subplots(4, figsize=(32, 18))
-    for method in methods:
-        if type(method) == dict:
-            filename = savename + "__" + method["name"] + ".pickle"
-            try:
-                with open(filename, "rb") as f:
-                    results = pickle.load(f)
-                f1_out = results["f1_out"]
-                f1_in = results["f1_in"]
-                roc_auc = results["roc_auc"]
-                balanced_accuracy = results["balanced_acc"]
-            except FileNotFoundError:
-                model = method["method"](**method["params"])
-                model.fit(x_train)
-                y_decision = np.zeros(len(y_test))
-                y_pred = np.zeros(len(y_test))
-                f1_out = np.zeros(len(y_test))
-                f1_in = np.zeros(len(y_test))
-                roc_auc = np.zeros(len(y_test))
-                balanced_accuracy = np.zeros(len(y_test))
-                for i in tqdm(range(len(x_test)), desc=method["name"]):
-                    y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
-                    y_pred[i] = -1 if y_decision[i] < 0 else 1
-                    try:
-                        f1_out[i] = f1_score(y_test[:i+1], y_pred[:i+1], pos_label=-1)
-                    except UndefinedMetricWarning:
-                        f1_out[i] = np.NaN
-                    try:
-                        f1_in[i] = f1_score(y_test[:i+1], y_pred[:i+1], pos_label=1)
-                    except UndefinedMetricWarning:
-                        f1_in[i] = np.NaN
-                    try:
-                        roc_auc[i] = roc_auc_score(y_test[:i+1], y_decision[:i+1])
-                    except ValueError:
-                        roc_auc[i] = np.NaN
-                    try:
-                        balanced_accuracy[i] = balanced_accuracy_score(y_test[:i+1], y_pred[:i+1])
-                    except UserWarning:
-                        balanced_accuracy[i] = np.NaN
-                results = {
-                    "f1_out": f1_out,
-                    "f1_in": f1_in,
-                    "roc_auc": roc_auc,
-                    "balanced_acc": balanced_accuracy,
-                }
-                with open(filename, "wb") as f:
-                    pickle.dump(results, f)
-            ax[0].plot(np.arange(0, len(x_test)), f1_out, ls=method["linestyle"], label=method["name"])
-            ax[1].plot(np.arange(0, len(x_test)), f1_in, ls=method["linestyle"], label=method["name"])
-            ax[2].plot(np.arange(0, len(x_test)), roc_auc, ls=method["linestyle"], label=method["name"])
-            ax[3].plot(np.arange(0, len(x_test)), balanced_accuracy, ls=method["linestyle"], label=method["name"])
-    ax[0].title.set_text("f1 score on outliers")
-    ax[0].legend()
-    ax[1].title.set_text("f1 score on inliers")
-    ax[1].legend()
-    ax[2].title.set_text("roc auc score")
-    ax[2].legend()
-    ax[3].title.set_text("balanced accuracy score")
-    ax[3].legend()
-    plt.savefig(savename + ".png")
-    plt.show()"""
-
-
 def plot(methods, x_train, x_test, y_test, savename):
     fig, ax = plt.subplots(4, figsize=(32, 18))
     y_decisions = dict()
@@ -258,19 +194,19 @@ def plot(methods, x_train, x_test, y_test, savename):
                     balanced_accuracy = np.zeros(len(y_test))
                     for i in tqdm(range(len(x_test)), desc=method["name"]):
                         try:
-                            f1_out[i] = f1_score(y_test[i-100:i+1], y_preds[method["name"]][i-100:i+1], pos_label=-1)
+                            f1_out[i] = f1_score(y_test[:i+1], y_preds[method["name"]][:i+1], pos_label=-1)
                         except (UndefinedMetricWarning, RuntimeWarning):
                             f1_out[i] = np.NaN
                         try:
-                            f1_in[i] = f1_score(y_test[i-100:i+1], y_preds[method["name"]][i-100:i+1], pos_label=1)
+                            f1_in[i] = f1_score(y_test[:i+1], y_preds[method["name"]][:i+1], pos_label=1)
                         except (UndefinedMetricWarning, RuntimeWarning):
                             f1_in[i] = np.NaN
                         try:
-                            roc_auc[i] = roc_auc_score(y_test[i-100:i+1], y_decisions[method["name"]][i-100:i+1])
+                            roc_auc[i] = roc_auc_score(y_test[:i+1], y_decisions[method["name"]][:i+1])  # score and decision (-1*score) give the same results
                         except (ValueError, RuntimeWarning):
                             roc_auc[i] = np.NaN
                         try:
-                            balanced_accuracy[i] = balanced_accuracy_score(y_test[i-100:i+1], y_preds[method["name"]][i-100:i+1])
+                            balanced_accuracy[i] = balanced_accuracy_score(y_test[:i+1], y_preds[method["name"]][:i+1])
                         except (UserWarning, RuntimeWarning):
                             balanced_accuracy[i] = np.NaN
                     results = {
