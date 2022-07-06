@@ -239,33 +239,52 @@ def plot(methods, x_train, x_test, y_test, savename):
                 y_preds[method["name"]] = y_pred
                 with open(filename, "wb") as f:
                     pickle.dump(results, f)
-    for method in methods:
-        if type(method) == dict:
-            f1_out = np.zeros(len(y_test))
-            f1_in = np.zeros(len(y_test))
-            roc_auc = np.zeros(len(y_test))
-            balanced_accuracy = np.zeros(len(y_test))
-            for i in tqdm(range(len(x_test)), desc=method["name"]):
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error")
+        for method in methods:
+            if type(method) == dict:
+                filename = "metric_" + savename + "__" + method["name"] + ".pickle"
                 try:
-                    f1_out[i] = f1_score(y_test[:i+1], y_preds[method["name"]][:i+1], pos_label=-1)
-                except UndefinedMetricWarning:
-                    f1_out[i] = np.NaN
-                try:
-                    f1_in[i] = f1_score(y_test[:i+1], y_preds[method["name"]][:i+1], pos_label=1)
-                except UndefinedMetricWarning:
-                    f1_in[i] = np.NaN
-                try:
-                    roc_auc[i] = roc_auc_score(y_test[:i+1], y_decisions[method["name"]][:i+1])
-                except ValueError:
-                    roc_auc[i] = np.NaN
-                try:
-                    balanced_accuracy[i] = balanced_accuracy_score(y_test[:i+1], y_preds[method["name"]][:i+1])
-                except UserWarning:
-                    balanced_accuracy[i] = np.NaN
-            ax[0].plot(np.arange(0, len(x_test)), f1_out, ls=method["linestyle"], label=method["name"])
-            ax[1].plot(np.arange(0, len(x_test)), f1_in, ls=method["linestyle"], label=method["name"])
-            ax[2].plot(np.arange(0, len(x_test)), roc_auc, ls=method["linestyle"], label=method["name"])
-            ax[3].plot(np.arange(0, len(x_test)), balanced_accuracy, ls=method["linestyle"], label=method["name"])
+                    with open(filename, "rb") as f:
+                        results = pickle.load(f)
+                    f1_out = results["f1_out"]
+                    f1_in = results["f1_in"]
+                    roc_auc = results["roc_auc"]
+                    balanced_accuracy = results["balanced_accuracy"]
+                except FileNotFoundError:
+                    f1_out = np.zeros(len(y_test))
+                    f1_in = np.zeros(len(y_test))
+                    roc_auc = np.zeros(len(y_test))
+                    balanced_accuracy = np.zeros(len(y_test))
+                    for i in tqdm(range(len(x_test)), desc=method["name"]):
+                        try:
+                            f1_out[i] = f1_score(y_test[i-100:i+1], y_preds[method["name"]][i-100:i+1], pos_label=-1)
+                        except (UndefinedMetricWarning, RuntimeWarning):
+                            f1_out[i] = np.NaN
+                        try:
+                            f1_in[i] = f1_score(y_test[i-100:i+1], y_preds[method["name"]][i-100:i+1], pos_label=1)
+                        except (UndefinedMetricWarning, RuntimeWarning):
+                            f1_in[i] = np.NaN
+                        try:
+                            roc_auc[i] = roc_auc_score(y_test[i-100:i+1], y_decisions[method["name"]][i-100:i+1])
+                        except (ValueError, RuntimeWarning):
+                            roc_auc[i] = np.NaN
+                        try:
+                            balanced_accuracy[i] = balanced_accuracy_score(y_test[i-100:i+1], y_preds[method["name"]][i-100:i+1])
+                        except (UserWarning, RuntimeWarning):
+                            balanced_accuracy[i] = np.NaN
+                    results = {
+                        "f1_out": f1_out,
+                        "f1_in": f1_in,
+                        "roc_auc": roc_auc,
+                        "balanced_accuracy": balanced_accuracy,
+                    }
+                    with open(filename, "wb") as f:
+                        pickle.dump(results, f)
+                ax[0].plot(np.arange(0, len(x_test)), f1_out, ls=method["linestyle"], label=method["name"])
+                ax[1].plot(np.arange(0, len(x_test)), f1_in, ls=method["linestyle"], label=method["name"])
+                ax[2].plot(np.arange(0, len(x_test)), roc_auc, ls=method["linestyle"], label=method["name"])
+                ax[3].plot(np.arange(0, len(x_test)), balanced_accuracy, ls=method["linestyle"], label=method["name"])
     ax[0].title.set_text("f1 score on outliers")
     ax[0].legend()
     ax[1].title.set_text("f1 score on inliers")
@@ -279,7 +298,6 @@ def plot(methods, x_train, x_test, y_test, savename):
 
 
 if __name__ == "__main__":
-    warnings.filterwarnings("error")
     split_pos = 1000
     data = load_dataset("../res/conveyor.csv")
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
