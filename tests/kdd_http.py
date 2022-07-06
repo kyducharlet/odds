@@ -3,7 +3,7 @@ from dsod.density import ILOF
 from dsod.statistics import SlidingMKDE, SimpleChristoffel, DyCG
 import warnings
 
-from tests.conveyor import load_dataset, split_data, plot, METHODS
+from tests.conveyor import load_dataset, split_data, compute, METHODS
 
 
 if __name__ == "__main__":
@@ -11,4 +11,4 @@ if __name__ == "__main__":
     split_pos = 1000
     data = load_dataset("../res/http.csv")
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
-    plot(METHODS, x_train, x_test, y_test, "results_http_1.png")
+    compute(METHODS, x_train, x_test, y_test, "results_http")

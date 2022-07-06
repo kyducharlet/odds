@@ -297,8 +297,59 @@ def plot(methods, x_train, x_test, y_test, savename):
     plt.show()
 
 
+def compute(methods, x_train, x_test, y_test, savename):
+    y_decisions = dict()
+    y_preds = dict()
+    for method in methods:
+        if type(method) == dict:
+            filename = savename + "__" + method["name"] + ".pickle"
+            try:
+                with open(filename, "rb") as f:
+                    results = pickle.load(f)
+                y_decisions[method["name"]] = results["y_decision"]
+                y_preds[method["name"]] = results["y_pred"]
+            except FileNotFoundError:
+                model = method["method"](**method["params"])
+                model.fit(x_train)
+                y_decision = np.zeros(len(y_test))
+                y_pred = np.zeros(len(y_test))
+                for i in tqdm(range(len(x_test)), desc=method["name"]):
+                    y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
+                    y_pred[i] = -1 if y_decision[i] < 0 else 1
+                results = {
+                    "y_decision": y_decision,
+                    "y_pred": y_pred,
+                }
+                y_decisions[method["name"]] = y_decision
+                y_preds[method["name"]] = y_pred
+                with open(filename, "wb") as f:
+                    pickle.dump(results, f)
+    cols = ["f1_out", "f1_in", "roc_auc", "balanced_acc"]
+    rows = []
+    table = []
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error")
+        for method in methods:
+            if type(method) == dict:
+                rows.append(method["name"])
+                f1_out = f1_score(y_test, y_preds[method["name"]], pos_label=-1)
+                f1_in = f1_score(y_test, y_preds[method["name"]], pos_label=1)
+                roc_auc = roc_auc_score(y_test, y_decisions[method["name"]])
+                balanced_accuracy = balanced_accuracy_score(y_test, y_preds[method["name"]])
+                res = [f1_out, f1_in, roc_auc, balanced_accuracy]
+                table.append(['%1.3f' % v for v in res])
+    fig, ax = plt.subplots()
+    fig.patch.set_visible(False)
+    ax.axis('off')
+    ax.axis('tight')
+    ax.table(cellText=table, rowLabels=rows, colLabels=cols, loc="center")
+    fig.tight_layout()
+    plt.savefig("final_metrics_" + savename + ".png")
+    plt.show()
+
+
 if __name__ == "__main__":
     split_pos = 1000
     data = load_dataset("../res/conveyor.csv")
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
-    plot(METHODS, x_train, x_test, y_test, "results_conveyor_final_2")
+    compute(METHODS, x_train, x_test, y_test, "results_conveyor_final_2")
