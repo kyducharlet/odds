@@ -151,6 +151,120 @@ def update_when_removing(points, index_dead, kNNs, k_distances, rds, lrds, lofs,
     return kNNs, k_distances, rds, lrds, lofs
 
 
+""" R*-tree and methods for ILOF optimization """
+
+
+class RStarTree:
+    def __init__(self, k, min_size, max_size):
+        self.k = k
+        self.root = RStarTreeNode(parent=None, node_type="leaf", min_size=min_size, max_size=max_size)
+
+
+class RStarTreeNode:
+    def __init__(self, parent, node_type, min_size, max_size):
+        self.parent = parent
+        self.node_type = node_type
+        assert 2 <= min_size <= max_size / 2, "It is required that 2 <= min_size <= max_size / 2."
+        self.min_size = min_size
+        self.max_size = max_size
+        self.high = None
+        self.low = None
+        self.children = []
+
+    def insert_data(self, obj):
+        pass
+
+    def chose_subtree(self, obj):
+        if self.node_type == "leaf":
+            return self
+        else:
+            if len(self.children) < self.min_size:
+                raise RuntimeError("This should not be possible.")
+            elif type(self.children[0]) == type(self):
+                min_enlargement = np.infty
+                selected_nodes = []
+                for child in self.children:
+                    enlargement = child.__compute_volume_enlargement__(obj)
+                    if enlargement < min_enlargement:
+                        min_enlargement = enlargement
+                        selected_nodes.clear()
+                        selected_nodes.append(child)
+                    elif enlargement == min_enlargement:
+                        selected_nodes.append(child)
+                if len(selected_nodes) == 1:
+                    return selected_nodes[0].insert_object(obj)
+                else:
+                    selected_nodes_volume = [c.__compute_volume__() for c in selected_nodes]
+                    return selected_nodes[np.argmin(selected_nodes_volume)].insert_object(obj)
+            else:
+                min_enlargement = np.infty
+                selected_nodes = []
+                for child in self.children:
+                    enlargement = child.__compute_overlap_enlargement__([c for c in self.children if c != child], obj)
+                    if enlargement < min_enlargement:
+                        min_enlargement = enlargement
+                        selected_nodes.clear()
+                        selected_nodes.append(child)
+                    elif enlargement == min_enlargement:
+                        selected_nodes.append(child)
+                if len(selected_nodes) == 1:
+                    return selected_nodes[0].insert_object(obj)
+                else:
+                    min_enlargement = np.infty
+                    selected_nodes_2 = []
+                    for child in selected_nodes:
+                        enlargement = child.__compute_volume_enlargement__(obj)
+                        if enlargement < min_enlargement:
+                            min_enlargement = enlargement
+                            selected_nodes_2.clear()
+                            selected_nodes_2.append(child)
+                        elif enlargement == min_enlargement:
+                            selected_nodes_2.append(child)
+                    if len(selected_nodes_2) == 1:
+                        return selected_nodes_2[0].insert_object(obj)
+                    else:
+                        selected_nodes_volume = [c.__compute_volume__() for c in selected_nodes_2]
+                        return selected_nodes_2[np.argmin(selected_nodes_volume)].insert_object(obj)
+
+    def overflow_treatment(self):
+        pass
+
+    def reinsert(self):
+        pass
+
+    def split(self):
+        pass
+
+    def __compute_volume__(self):
+        return np.product(self.high - self.low)
+
+    def __compute_volume_enlargement__(self, obj):
+        new_low = np.minimum(self.low, obj.low)
+        new_high = np.maximum(self.high, obj.high)
+        return np.product(new_high - new_low) - self.__compute_volume__()
+
+    def __compute_overlap_enlargement__(self, compared_nodes, obj):
+        new_low = np.minimum(self.low, obj.low)
+        new_high = np.maximum(self.high, obj.high)
+        old_overlap = 0
+        new_overlap = 0
+        for node in compared_nodes:
+            min_high = np.minimum(self.high, node.high)
+            max_low = np.maximum(self.low, node.low)
+            old_overlap += np.product(np.maximum(np.zeros(min_high.shape), min_high - max_low))
+            min_high = np.minimum(new_high, node.high)
+            max_low = np.maximum(new_low, node.low)
+            new_overlap += np.product(np.maximum(np.zeros(min_high.shape), min_high - max_low))
+        return new_overlap - old_overlap
+
+
+
+class RStarTreeObject:
+    def __init__(self, low, high):
+        self.low = low
+        self.high = high
+
+
 """ M-tree used by MCOD for range queries """
 
 

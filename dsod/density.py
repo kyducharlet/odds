@@ -125,3 +125,29 @@ class ILOF(BaseDetector):
         model_bis.lofs = self.lofs
         model_bis.p = self.p
         return model_bis
+
+
+class ILOFv2(BaseDetector):
+    def __init__(self):
+        pass
+
+    def fit(self, x):
+        pass
+
+    def update(self, x):
+        pass
+
+    def score_samples(self, x):
+        pass
+
+    def decision_function(self, x):
+        pass
+
+    def predict(self, x):
+        pass
+
+    def eval_update(self, x):
+        pass
+
+    def copy(self):
+        pass
