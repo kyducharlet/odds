@@ -155,32 +155,58 @@ def update_when_removing(points, index_dead, kNNs, k_distances, rds, lrds, lofs,
 
 
 class RStarTree:
-    def __init__(self, k, min_size, max_size):
+    def __init__(self, k, min_size=3, max_size=12, p=4, reinsert_strategy="close"):
         self.k = k
-        self.root = RStarTreeNode(parent=None, node_type="leaf", min_size=min_size, max_size=max_size)
+        self.levels = [RStarTreeLevel(0)]
+        self.root = RStarTreeNode(min_size, max_size, p, level=self.levels[0], leaf_level=self.levels[-1], reinsert_strategy=reinsert_strategy, tree=self)
+
+    def insert_data(self, x):
+        for xx in x:
+            self.root.insert_data(RStarTreeObject(xx.reshape(1, -1), xx.reshape(1, -1)))
+
+    def __create_new_root__(self):
+        for level in self.levels:
+            level.increment()
+        self.levels.append(RStarTreeLevel(0))
+        self.root = RStarTreeNode(self.root.min_size, self.root.max_size, self.root.p, level=self.levels[-1], leaf_level=self.root.leaf_level,
+                                  reinsert_strategy=self.root.reinsert_strategy, tree=self)
+        return self.root
 
 
 class RStarTreeNode:
-    def __init__(self, parent, node_type, min_size, max_size):
+    def __init__(self, min_size, max_size, p, level, leaf_level, parent=None, reinsert_strategy="close", tree=None):
         self.parent = parent
-        self.node_type = node_type
         assert 2 <= min_size <= max_size / 2, "It is required that 2 <= min_size <= max_size / 2."
         self.min_size = min_size
         self.max_size = max_size
+        self.p = p
+        assert reinsert_strategy in ["close", "far"], "'reinsert_strategy' should be either 'close' or 'far'."
+        self.reinsert_strategy = reinsert_strategy
+        self.level = level
+        self.leaf_level = leaf_level
+        self.tree = tree
         self.high = None
         self.low = None
         self.children = []
 
     def insert_data(self, obj):
-        pass
+        self.__insert__(obj, self.leaf_level)
 
-    def chose_subtree(self, obj):
-        if self.node_type == "leaf":
+    def __insert__(self, obj, level):
+        chosen_node = self.__chose_subtree__(obj, level)
+        chosen_node.children.append(obj)
+        obj.parent = chosen_node
+        if len(chosen_node.children) > self.max_size:
+            chosen_node.__overflow_treatment__(chosen_node.level)
+        chosen_node.__force_adjust_mbr__()
+
+    def __chose_subtree__(self, obj, level):
+        if self.level == level:
             return self
         else:
-            if len(self.children) < self.min_size:
+            if self.parent is not None and len(self.children) < self.min_size:
                 raise RuntimeError("This should not be possible.")
-            elif type(self.children[0]) == type(self):
+            elif self.level == self.leaf_level:
                 min_enlargement = np.infty
                 selected_nodes = []
                 for child in self.children:
@@ -192,10 +218,10 @@ class RStarTreeNode:
                     elif enlargement == min_enlargement:
                         selected_nodes.append(child)
                 if len(selected_nodes) == 1:
-                    return selected_nodes[0].insert_object(obj)
+                    return selected_nodes[0].__chose_subtree__(obj, level)
                 else:
                     selected_nodes_volume = [c.__compute_volume__() for c in selected_nodes]
-                    return selected_nodes[np.argmin(selected_nodes_volume)].insert_object(obj)
+                    return selected_nodes[np.argmin(selected_nodes_volume)].__chose_subtree__(obj, level)
             else:
                 min_enlargement = np.infty
                 selected_nodes = []
@@ -208,7 +234,7 @@ class RStarTreeNode:
                     elif enlargement == min_enlargement:
                         selected_nodes.append(child)
                 if len(selected_nodes) == 1:
-                    return selected_nodes[0].insert_object(obj)
+                    return selected_nodes[0].__chose_subtree__(obj, level)
                 else:
                     min_enlargement = np.infty
                     selected_nodes_2 = []
@@ -221,19 +247,77 @@ class RStarTreeNode:
                         elif enlargement == min_enlargement:
                             selected_nodes_2.append(child)
                     if len(selected_nodes_2) == 1:
-                        return selected_nodes_2[0].insert_object(obj)
+                        return selected_nodes_2[0].__chose_subtree__(obj, level)
                     else:
                         selected_nodes_volume = [c.__compute_volume__() for c in selected_nodes_2]
-                        return selected_nodes_2[np.argmin(selected_nodes_volume)].insert_object(obj)
+                        return selected_nodes_2[np.argmin(selected_nodes_volume)].__chose_subtree__(obj, level)
 
-    def overflow_treatment(self):
-        pass
+    def __overflow_treatment__(self, level):
+        if level.level != 0 and not level.overflow_treated:
+            level.overflow_treated = True
+            self.__reinsert__()
+        else:
+            self.__split__()
+            level.overflow_treated = False
 
-    def reinsert(self):
-        pass
+    def __reinsert__(self):
+        mbr_center = (self.high + self.low) / 2
+        distances_to_mbr = [np.linalg.norm(mbr_center - ((r.high + r.low) / 2)) for r in self.children]
+        furthest_rects_indices = np.argsort(distances_to_mbr)[:self.p:-1]
+        to_reinsert = [self.children[i] for i in furthest_rects_indices]
+        for r in to_reinsert:
+            self.children.remove(r)
+        self.__force_adjust_mbr__()
+        if self.reinsert_strategy == "close":
+            to_reinsert.reverse()
+        root = self.__get_root__()
+        for r in to_reinsert:
+            root.__insert__(r, self.level)
 
-    def split(self):
-        pass
+    def __split__(self):
+        split_axis = self.__chose_split_axis__()
+        split_index, first_group, second_group = self.__chose_split_index__(split_axis)
+        if self.parent is None:
+            new_root = self.tree.__create_new_root__()
+            new_root.__insert__(self, new_root.level)
+            self.tree = None
+        new_node = RStarTreeNode(min_size=self.min_size, max_size=self.max_size, p=self.p, level=self.level, leaf_level=self.leaf_level, parent=self.parent, reinsert_strategy=self.reinsert_strategy)
+        for r in second_group:
+            self.children.remove(r)
+            new_node.__insert__(r, level=new_node.level)
+        self.parent.__insert__(new_node, level=self.parent.level)
+
+    def __chose_split_axis__(self):
+        best_axis = (-1, np.infty)
+        for i in range(self.low.shape[1]):
+            sorted_entries = sorted(self.children, key=lambda elt: [elt.low[0, i], elt.high[0, i]])
+            sum_margin_values = 0
+            for j in range(self.max_size - 2 * self.min_size + 2):
+                first_group = sorted_entries[:self.min_size + j]
+                fg_margin = np.product(np.max([r.high for r in first_group], axis=0) - np.min([r.low for r in first_group], axis=0)) - np.sum([r.__compute_volume__() for r in first_group])
+                second_group = sorted_entries[self.min_size + j:]
+                sg_margin = np.product(np.max([r.high for r in second_group], axis=0) - np.min([r.low for r in second_group], axis=0)) - np.sum([r.__compute_volume__() for r in second_group])
+                sum_margin_values += fg_margin + sg_margin
+            if sum_margin_values < best_axis[1]:
+                best_axis = (i, sum_margin_values)
+        return best_axis[0]
+
+    def __chose_split_index__(self, split_axis):
+        sorted_entries = sorted(self.children, key=lambda elt: [elt.low[0, split_axis], elt.high[0, split_axis]])
+        best_index = (-1, np.infty, np.infty, None, None)
+        for j in range(self.max_size - 2 * self.min_size + 2):
+            first_group = sorted_entries[:self.min_size + j]
+            fg_low = np.min([r.low for r in first_group], axis=0)
+            fg_high = np.max([r.high for r in first_group], axis=0)
+            second_group = sorted_entries[self.min_size + j:]
+            sg_low = np.min([r.low for r in second_group], axis=0)
+            sg_high = np.max([r.high for r in second_group], axis=0)
+            overlap_volume = np.product(np.maximum(np.zeros(fg_low.shape), np.minimum(fg_high, sg_high) - np.maximum(fg_low, sg_low)))
+            if overlap_volume <= best_index[1]:
+                total_volume = np.product(fg_high - fg_low) + np.product(sg_high - sg_low)
+                if overlap_volume < best_index[1] or total_volume < best_index[2]:
+                    best_index = (j, overlap_volume, total_volume, first_group, second_group)
+        return best_index[0], best_index[3], best_index[4]
 
     def __compute_volume__(self):
         return np.product(self.high - self.low)
@@ -257,12 +341,35 @@ class RStarTreeNode:
             new_overlap += np.product(np.maximum(np.zeros(min_high.shape), min_high - max_low))
         return new_overlap - old_overlap
 
+    def __force_adjust_mbr__(self):
+        old_low = self.low
+        old_high = self.high
+        self.low = np.min([r.low for r in self.children], axis=0)
+        self.high = np.max([r.high for r in self.children], axis=0)
+        if self.parent is not None and not ((self.low == old_low).all() and (self.high == old_high).all()):
+            self.parent.__force_adjust_mbr__()
+
+    def __get_root__(self):
+        return self if self.parent is None else self.parent.__get_root__()
 
 
 class RStarTreeObject:
     def __init__(self, low, high):
         self.low = low
         self.high = high
+        self.parent = None
+
+    def __compute_volume__(self):
+        return np.product(self.high - self.low)
+
+
+class RStarTreeLevel:
+    def __init__(self, level):
+        self.level = level
+        self.overflow_treated = False
+
+    def increment(self):
+        self.level += 1
 
 
 """ M-tree used by MCOD for range queries """
@@ -358,7 +465,7 @@ class MTree:
             self.parent.children[new_Mtree] = dist
             self.parent.radius = max(self.parent.radius, dist + radius_2)
             if len(self.parent.children.keys()) > self.M:
-                return self.parent.split()
+                return self.parent.__split__()
             else:
                 return self.__get_root__()
         else:

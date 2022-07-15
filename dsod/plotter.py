@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import numpy as np
 from .base import BaseDetector, BasePlotter
 from .distance import OSMCOD
+from .utils import RStarTree
 
 
 class LevelsetPlotter(BasePlotter):
@@ -20,11 +22,12 @@ class LevelsetPlotter(BasePlotter):
     """
 
     def __init__(self, model: BaseDetector):
-        assert model.p == 2
+        assert model.__dict__.get("p") is not None
+        assert model.__dict__["p"] == 2
         self.model = model
 
     def plot(self, x, n_x1=100, n_x2=100, show=False, save=False, save_title="fig.png", close=True):
-        assert x.shape[1] == self.model.p
+        assert x.shape[1] == self.model.__dict__["p"]
         fig, ax = plt.subplots()
         ax.scatter(x[:, 0], x[:, 1], marker='x', s=20)
         x1_margin = (np.max(x[:, 0]) - np.min(x[:, 0])) / 10
@@ -51,6 +54,7 @@ class LevelsetPlotter(BasePlotter):
             return fig, ax
 
 
+# TODO: Change MTreePlotter to take MTree in spite of OSMCOD
 class MTreePlotter(BasePlotter):
     def __init__(self, model: OSMCOD):
         assert model.p == 2
@@ -86,3 +90,34 @@ class MTreePlotter(BasePlotter):
             for child in node.children.keys():
                 c_ = plt.Circle((child.values[0], child.values[1]), self.model.R / 2, color='green', fill=False)
                 ax.add_patch(c_)
+
+
+class RStarTreePlotter(BasePlotter):
+    def __init__(self, structure: RStarTree):
+        self.structure = structure
+
+    def plot(self, x, n_x1=100, n_x2=100, show=False, save=False, save_title="fig.png", close=True):
+        fig, ax = plt.subplots()
+        ax.scatter(x[:, 0], x[:, 1], marker='x', s=20)
+        x1_margin = (np.max(x[:, 0]) - np.min(x[:, 0])) / 10
+        x2_margin = (np.max(x[:, 1]) - np.min(x[:, 1])) / 10
+        ax.set_xlim([np.min(x[:, 0]) - x1_margin, np.max(x[:, 0]) + x1_margin])
+        ax.set_ylim([np.min(x[:, 1]) - x2_margin, np.max(x[:, 1]) + x2_margin])
+        cmap = cm.get_cmap('gist_rainbow')
+        colors = cmap(np.linspace(0, 1, len(self.structure.levels)))
+        self.__plot_rectangles__(self.structure.root, colors, ax)
+        if save:
+            plt.savefig(save_title)
+        if show:
+            plt.show()
+        if close:
+            plt.close()
+        else:
+            return fig, ax
+
+    def __plot_rectangles__(self, node, colors, ax):
+        r = plt.Rectangle((node.low[0, 0], node.low[0, 1]), node.high[0, 0] - node.low[0, 0], node.high[0, 1] - node.low[0, 1], color=colors[node.level.level], fill=False)
+        ax.add_patch(r)
+        if node.level != self.structure.levels[0]:
+            for child in node.children:
+                self.__plot_rectangles__(child, colors, ax)
