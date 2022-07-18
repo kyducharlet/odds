@@ -98,11 +98,6 @@ class RStarTreePlotter(BasePlotter):
 
     def plot(self, x, n_x1=100, n_x2=100, show=False, save=False, save_title="fig.png", close=True):
         fig, ax = plt.subplots()
-        ax.scatter(x[:, 0], x[:, 1], marker='x', s=20)
-        x1_margin = (np.max(x[:, 0]) - np.min(x[:, 0])) / 10
-        x2_margin = (np.max(x[:, 1]) - np.min(x[:, 1])) / 10
-        ax.set_xlim([np.min(x[:, 0]) - x1_margin, np.max(x[:, 0]) + x1_margin])
-        ax.set_ylim([np.min(x[:, 1]) - x2_margin, np.max(x[:, 1]) + x2_margin])
         cmap = cm.get_cmap('gist_rainbow')
         colors = cmap(np.linspace(0, 1, len(self.structure.levels)))
         self.__plot_rectangles__(self.structure.root, colors, ax)
@@ -121,3 +116,6 @@ class RStarTreePlotter(BasePlotter):
         if node.level != self.structure.levels[0]:
             for child in node.children:
                 self.__plot_rectangles__(child, colors, ax)
+        else:
+            for child in node.children:
+                ax.scatter(child.low[0, 0], child.low[0, 1], marker='x', s=20, c='k', alpha=0.3)

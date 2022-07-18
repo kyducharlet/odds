@@ -159,10 +159,58 @@ class RStarTree:
         self.k = k
         self.levels = [RStarTreeLevel(0)]
         self.root = RStarTreeNode(min_size, max_size, p, level=self.levels[0], leaf_level=self.levels[-1], reinsert_strategy=reinsert_strategy, tree=self)
+        self.objects = []
 
     def insert_data(self, x):
-        for xx in x:
-            self.root.insert_data(RStarTreeObject(xx.reshape(1, -1), xx.reshape(1, -1)))
+        obj = RStarTreeObject(x, x)
+        obj.kNN = self.search_kNN(obj)
+        self.root.insert_data(obj)
+        self.objects.append(obj)
+
+    def remove_data(self, n):
+        for i in range(n):
+            obj = self.objects.pop(0)
+            obj.__remove__()
+
+    def search_kNN(self, obj):
+        res = self.k * [(np.infty, None)]
+        self.__search_kNN__(self.root, obj, res)
+        return res
+
+    def __search_kNN__(self, node, obj, res):
+        if node.level == node.leaf_level:
+            for c in node.children:
+                dist = obj.__compute_dist__(c)
+                if dist <= res[-1][0]:
+                    res.append((dist, c))
+                    res = sorted(res, key=lambda elt: elt[0])
+                    if dist < res[-1][0]:
+                        new_res = [(d, o) for (d, o) in res if d < res[-1][0]]
+                        if len(new_res) >= self.k:
+                            res = new_res
+        else:
+            branch_list = sorted([(obj.__compute_mindist__(r), obj.__compute_minmaxdist__(r), r) for r in node.children], key=lambda elt: elt[0])
+            max_possible_dist = min(np.min([elt[1] for elt in branch_list]), res[-1][0])
+            branch_list = [elt for elt in branch_list if elt[0] <= max_possible_dist]
+            for elt in branch_list:
+                self.__search_kNN__(elt[2], obj, res)
+                while len(branch_list) > 0 and branch_list[-1][0] > res[-1][0]:
+                    branch_list.pop()
+
+    def search_RkNN(self, obj):
+        pass
+
+    def __search_RkNN_trim__(self, obj, candidates, node):
+        pass
+
+    def __search_RkNN_filter__(self, obj):
+        pass
+
+    def __search_RkNN_refinement__(self, obj, candidates, refining_points, refining_nodes):
+        pass
+
+    def __search_RkNN_refinement_round__(self, obj, candidates, refining_points, refining_nodes):
+        pass
 
     def __create_new_root__(self):
         for level in self.levels:
@@ -192,21 +240,25 @@ class RStarTreeNode:
     def insert_data(self, obj):
         self.__insert__(obj, self.leaf_level)
 
+    def remove_data(self, obj):
+        self.children.remove(obj)
+        self.__adjust_mbr__()
+        if len(self.children) < self.min_size:
+            self.__underflow_treatment__()
+
     def __insert__(self, obj, level):
         chosen_node = self.__chose_subtree__(obj, level)
         chosen_node.children.append(obj)
         obj.parent = chosen_node
         if len(chosen_node.children) > self.max_size:
             chosen_node.__overflow_treatment__(chosen_node.level)
-        chosen_node.__force_adjust_mbr__()
+        chosen_node.__adjust_mbr__()
 
     def __chose_subtree__(self, obj, level):
         if self.level == level:
             return self
         else:
-            if self.parent is not None and len(self.children) < self.min_size:
-                raise RuntimeError("This should not be possible.")
-            elif self.level == self.leaf_level:
+            if self.level == self.leaf_level:
                 min_enlargement = np.infty
                 selected_nodes = []
                 for child in self.children:
@@ -260,6 +312,35 @@ class RStarTreeNode:
             self.__split__()
             level.overflow_treated = False
 
+    def __underflow_treatment__(self):
+        if self.level.level != 0:
+            self.parent.children.remove(self)
+            self.parent.__adjust_mbr__()
+            root = self.__get_root__()
+            mbr_center = (root.high + root.low) / 2
+            distances_to_mbr = [np.linalg.norm(mbr_center - ((r.high + r.low) / 2)) for r in self.children]
+            closest_rects_indices = np.argsort(distances_to_mbr)
+            to_reinsert = [self.children[i] for i in closest_rects_indices]
+            for r in to_reinsert:
+                root.__insert__(r, self.level)
+            if len(self.parent.children) < self.min_size:
+                self.parent.__underflow_treatment__()
+        elif self.leaf_level.level != 0:
+            grandchildren = []
+            children_level = self.children[0].level
+            for c in self.children:
+                grandchildren.extend(c.children)
+            self.children = []
+            self.tree.levels.remove(children_level)
+            for level in self.tree.levels[:-1]:
+                level.decrement()
+            mbr_center = (self.high + self.low) / 2
+            distances_to_mbr = [np.linalg.norm(mbr_center - ((r.high + r.low) / 2)) for r in grandchildren]
+            closest_rects_indices = np.argsort(distances_to_mbr)
+            to_reinsert = [grandchildren[i] for i in closest_rects_indices]
+            for r in to_reinsert:
+                self.__insert__(r, self.level)
+
     def __reinsert__(self):
         mbr_center = (self.high + self.low) / 2
         distances_to_mbr = [np.linalg.norm(mbr_center - ((r.high + r.low) / 2)) for r in self.children]
@@ -267,7 +348,7 @@ class RStarTreeNode:
         to_reinsert = [self.children[i] for i in furthest_rects_indices]
         for r in to_reinsert:
             self.children.remove(r)
-        self.__force_adjust_mbr__()
+        self.__adjust_mbr__()
         if self.reinsert_strategy == "close":
             to_reinsert.reverse()
         root = self.__get_root__()
@@ -285,6 +366,7 @@ class RStarTreeNode:
         for r in second_group:
             self.children.remove(r)
             new_node.__insert__(r, level=new_node.level)
+        self.__adjust_mbr__()
         self.parent.__insert__(new_node, level=self.parent.level)
 
     def __chose_split_axis__(self):
@@ -341,13 +423,13 @@ class RStarTreeNode:
             new_overlap += np.product(np.maximum(np.zeros(min_high.shape), min_high - max_low))
         return new_overlap - old_overlap
 
-    def __force_adjust_mbr__(self):
+    def __adjust_mbr__(self):
         old_low = self.low
         old_high = self.high
         self.low = np.min([r.low for r in self.children], axis=0)
         self.high = np.max([r.high for r in self.children], axis=0)
         if self.parent is not None and not ((self.low == old_low).all() and (self.high == old_high).all()):
-            self.parent.__force_adjust_mbr__()
+            self.parent.__adjust_mbr__()
 
     def __get_root__(self):
         return self if self.parent is None else self.parent.__get_root__()
@@ -358,9 +440,33 @@ class RStarTreeObject:
         self.low = low
         self.high = high
         self.parent = None
+        self.kNN = None
 
     def __compute_volume__(self):
         return np.product(self.high - self.low)
+
+    def __compute_dist__(self, obj):
+        return np.linalg.norm(obj.low - self.low)
+
+    def __compute_mindist__(self, rect):
+        p_before = np.maximum(np.zeros(self.low.shape), rect.low - self.low)
+        p_after = np.maximum(np.zeros(self.high.shape), self.high - rect.high)
+        return np.sum(np.square(np.maximum(p_before, p_after)))
+
+    def __compute_minmaxdist__(self, rect):
+        mbr_center = (rect.high + rect.low) / 2
+        where_rm = np.where(self.low <= mbr_center)
+        rm = rect.high.copy()
+        rm[where_rm] = rect.low[where_rm]
+        where_rM = np.where(self.low >= mbr_center)
+        rM = rect.high.copy()
+        rM[where_rM] = rect.low[where_rM]
+        return np.min([np.square(self.low[0, i] - rm[0, i]) + np.sum([
+            np.square([self.low[0, j] - rM[0, j]]) for j in range(self.low.shape[1]) if j != i
+        ]) for i in range(self.low.shape[1])])
+
+    def __remove__(self):
+        self.parent.remove_data(self)
 
 
 class RStarTreeLevel:
@@ -370,6 +476,9 @@ class RStarTreeLevel:
 
     def increment(self):
         self.level += 1
+
+    def decrement(self):
+        self.level -= 1
 
 
 """ M-tree used by MCOD for range queries """
