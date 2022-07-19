@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import linalg
 import itertools
+import heapq
 
 
 """ Kernel functions for KDE """
@@ -155,10 +156,11 @@ def update_when_removing(points, index_dead, kNNs, k_distances, rds, lrds, lofs,
 
 
 class RStarTree:
-    def __init__(self, k, min_size=3, max_size=12, p=4, reinsert_strategy="close"):
+    def __init__(self, k, min_size=3, max_size=12, p=4, reinsert_strategy="close", n_trim_iterations=3):
         self.k = k
         self.levels = [RStarTreeLevel(0)]
         self.root = RStarTreeNode(min_size, max_size, p, level=self.levels[0], leaf_level=self.levels[-1], reinsert_strategy=reinsert_strategy, tree=self)
+        self.I = n_trim_iterations
         self.objects = []
 
     def insert_data(self, x):
@@ -200,17 +202,102 @@ class RStarTree:
     def search_RkNN(self, obj):
         pass
 
-    def __search_RkNN_trim__(self, obj, candidates, node):
-        pass
+    def __search_RkNN_trim__(self, obj, Scnd, node):
+        trimmed_square = RStarTreeObject(node.low.copy(), node.high.copy())
+        for cand_comb in itertools.combinations(Scnd, self.k):
+            trimmed_square = trimmed_square.__clip__(obj, cand_comb, self.I)
+            if trimmed_square.contains_nan():
+                return np.infty
+        return obj.__compute_mindist__(trimmed_square)
 
     def __search_RkNN_filter__(self, obj):
-        pass
+        h = []
+        heapq.heappush(h, (0, self.root))
+        Scnd = []
+        Srfn = []
+        while len(h) != 0:
+            dist, elt = heapq.heappop(h)
+            if self.__search_RkNN_trim__(obj, Scnd, elt) == np.infty:
+                Srfn.append(elt)
+            else:
+                if type(elt) != RStarTreeNode:
+                    Scnd.append(elt)
+                elif elt.level == elt.leaf_level:
+                    for dist, point in sorted(zip([p.__compute_dist__(obj) for p in elt.children], elt.children), key=lambda p: p[0]):
+                        if self.__search_RkNN_trim__(obj, Scnd, point) == np.infty:
+                            Srfn.append(point)
+                        else:
+                            heapq.heappush(h, (dist, point))
+                else:
+                    for node in elt.children:
+                        dist = self.__search_RkNN_trim__(obj, Scnd, node)
+                        if dist == np.infty:
+                            Srfn.append(node)
+                        else:
+                            heapq.heappush(h, (dist, node))
+        Prfn = [elt for elt in Srfn if type(elt) != RStarTreeNode]
+        Nrfn = [elt for elt in Srfn if type(elt) == RStarTreeNode]
+        return Scnd, Prfn, Nrfn
 
-    def __search_RkNN_refinement__(self, obj, candidates, refining_points, refining_nodes):
-        pass
+    def __search_RkNN_refinement__(self, obj, Scnd, Prfn, Nrfn):
+        Srnn = []
+        Scnd_ = 1 * Scnd
+        for p in Scnd:
+            for p_ in Scnd_:
+                if p_ != p:
+                    if p.__compute_dist__(p_) < p.__compute_dist__(obj):
+                        Scnd_.remove(p)
+                        break
+        Scnd = Scnd_
+        while len(Scnd) != 0:
+            Scnd, to_visit, Srnn = self.__search_RkNN_refinement_round__(obj, Scnd, Prfn, Nrfn, Srnn)
+            if len(Scnd) == 0:
+                return Srnn
+            Prfn = []
+            Nrfn = []
+            count_nodes = {}
+            for node_list in to_visit:
+                for node in node_list:
+                    if count_nodes.get(node.level.level) is None:
+                        count_nodes[node.level.level] = {node: 1}
+                    elif count_nodes[node.level.level].get(node) is None:
+                        count_nodes[node.level.level][node] = 1
+                    else:
+                        count_nodes[node.level.level][node] += 1
+            min_level = np.min(list(count_nodes.keys()))
+            best_node = sorted(count_nodes[min_level].items(), key=lambda elt: -1 * elt[1])[0]
+            if best_node.level == best_node.leaf_level:
+                Prfn.extend(best_node.children)
+            else:
+                Nrfn.extend(best_node.children)
 
-    def __search_RkNN_refinement_round__(self, obj, candidates, refining_points, refining_nodes):
-        pass
+    def __search_RkNN_refinement_round__(self, obj, Scnd, Prfn, Nrfn, Srnn):
+        to_visit = []
+        Scnd_ = 1 * Scnd
+        for p in Scnd:
+            to_visit_p = []
+            valid = True
+            for p_ in Prfn:
+                if p.__compute_dist__(p_) < p.__compute_dist__(obj):
+                    Scnd_.remove(p)
+                    valid = False
+                    break
+            if valid:
+                for node in Nrfn:
+                    if p.__compute_minmaxdist__(node) < p.__compute_dist__(obj):
+                        Scnd_.remove(p)
+                        valid = False
+                        break
+                if valid:
+                    for node in Nrfn:
+                        if p.__compute_mindist__(node) < p.dist(obj):
+                            to_visit_p.append(node)
+                    if len(to_visit_p) == 0:
+                        Srnn.append(p)
+                        Scnd_.remove(p)
+                    else:
+                        to_visit.append(to_visit_p)
+        return Scnd_, to_visit, Srnn
 
     def __create_new_root__(self):
         for level in self.levels:
@@ -424,8 +511,8 @@ class RStarTreeNode:
         return new_overlap - old_overlap
 
     def __adjust_mbr__(self):
-        old_low = self.low
-        old_high = self.high
+        old_low = self.low.copy()
+        old_high = self.high.copy()
         self.low = np.min([r.low for r in self.children], axis=0)
         self.high = np.max([r.high for r in self.children], axis=0)
         if self.parent is not None and not ((self.low == old_low).all() and (self.high == old_high).all()):
@@ -436,7 +523,7 @@ class RStarTreeNode:
 
 
 class RStarTreeObject:
-    def __init__(self, low, high):
+    def __init__(self, low: np.ndarray, high: np.ndarray):
         self.low = low
         self.high = high
         self.parent = None
@@ -465,8 +552,45 @@ class RStarTreeObject:
             np.square([self.low[0, j] - rM[0, j]]) for j in range(self.low.shape[1]) if j != i
         ]) for i in range(self.low.shape[1])])
 
+    def __clip__(self, ref_point, clipping_points, I):
+        old_low = self.low.copy()
+        old_high = self.high.copy()
+        a = []
+        b = []
+        z = []
+        d = []
+        cpt = 0
+        while(cpt <= I):
+            for i in range(len(clipping_points)):
+                a.append(ref_point.low - clipping_points[i].low)
+                b.append((np.linalg.norm(ref_point.low) - np.linalg.norm(clipping_points[i].low)) / 2)
+                z.append(self.high.copy())
+                z[i][np.where(a[i] <= 0)] = self.low[np.where(a[i] <= 0)]
+                d.append(b[i] - np.dot(a[i].reshape(-1), z[i].reshape(-1)))
+            a_arr = np.array(a).reshape(-1, self.low.shape[1])
+            d_arr = np.array(d).reshape(-1, 1)
+            if (d_arr > 0).all():
+                self.low = np.nan * self.low
+                self.high = np.nan * self.high
+                return self
+            else:
+                a_arr = a_arr[np.where(d_arr <= 0)[0]]
+                d_arr = d_arr[np.where(d_arr <= 0)]
+                for j in range(a_arr.shape[1]):
+                    if (a_arr[:, j] > 0).all():
+                        self.low[0, j] = np.minimum([np.max(self.low[0, j], self.high[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                    elif (a_arr[:, j] < 0).all():
+                        self.low[0, j] = np.maximum([np.min(self.high[0, j], self.low[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                if (self.low == old_low).all() and (self.high == old_high).all():
+                    return self
+                else:
+                    cpt += 1
+
     def __remove__(self):
         self.parent.remove_data(self)
+
+    def contains_nan(self):
+        return np.isnan(self.low).any() or np.isnan(self.high).any()
 
 
 class RStarTreeLevel:
