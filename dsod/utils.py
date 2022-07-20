@@ -167,16 +167,29 @@ class RStarTree:
         obj = RStarTreeObject(x, x)
         self.root.insert_data(obj)
         self.objects.append(obj)
+        return obj
 
-    def remove_data(self, n):
+    def remove_oldest(self, n):
         for i in range(n):
             obj = self.objects.pop(0)
             obj.__remove__()
 
-    def search_kNN(self, x):
-        obj = RStarTreeObject(x, x)
+    def remove_data(self, obj):
+        self.objects.remove(obj)
+        obj.__remove__()
+
+    def search_kNN(self, obj):
+        if type(obj) == np.ndarray:
+            obj_ = RStarTreeObject(obj, obj)
+        else:
+            obj_ = obj
+            obj.parent.children.remove(obj)
+            obj.parent.__adjust_mbr__()
         res = self.k * [(np.infty, None)]
-        res = self.__search_kNN__(self.root, obj, res)
+        res = self.__search_kNN__(self.root, obj_, res)
+        if type(obj) != np.ndarray:
+            obj.parent.children.append(obj)
+            obj.parent.__adjust_mbr__()
         return [o[1] for o in res]
 
     def __search_kNN__(self, node, obj, res):
@@ -201,10 +214,18 @@ class RStarTree:
                     branch_list.pop()
             return res
 
-    def search_RkNN(self, x):
-        obj = RStarTreeObject(x, x)
-        Scnd, Prfn, Nrfn = self.__search_RkNN_filter__(obj)
-        Srnn = self.__search_RkNN_refinement__(obj, Scnd, Prfn, Nrfn)
+    def search_RkNN(self, obj):
+        if type(obj) == np.ndarray:
+            obj_ = RStarTreeObject(obj, obj)
+        else:
+            obj_ = obj
+            obj.parent.children.remove(obj)
+            obj.parent.__adjust_mbr__()
+        Scnd, Prfn, Nrfn = self.__search_RkNN_filter__(obj_)
+        Srnn = self.__search_RkNN_refinement__(obj_, Scnd, Prfn, Nrfn)
+        if type(obj) != np.ndarray:
+            obj.parent.children.append(obj)
+            obj.parent.__adjust_mbr__()
         return Srnn
 
     def __search_RkNN_filter__(self, obj):
@@ -272,7 +293,7 @@ class RStarTree:
                     else:
                         count_nodes[node.level.level][node] += 1
             min_level = np.min(list(count_nodes.keys()))
-            best_node = sorted(count_nodes[min_level].items(), key=lambda elt: -1 * elt[1])[0]
+            best_node = sorted(count_nodes[min_level].items(), key=lambda elt: -1 * elt[1])[0][0]
             if best_node.level == best_node.leaf_level:
                 Prfn.extend(best_node.children)
             else:
@@ -302,7 +323,7 @@ class RStarTree:
                             break
                 if valid:
                     for node in Nrfn:
-                        if p[0].__compute_mindist__(node) < p[0].dist(obj):
+                        if p[0].__compute_mindist__(node) < p[0].__compute_dist__(obj):
                             to_visit_p.append(node)
                     if len(to_visit_p) == 0:
                         Srnn.append(p[0])
@@ -600,7 +621,7 @@ class RStarTreeObject:
         return self
 
     def __remove__(self):
-        self.parent.remove_data(self)
+        self.parent.remove_oldest(self)
 
     def contains_nan(self):
         return np.isnan(self.low).any() or np.isnan(self.high).any()

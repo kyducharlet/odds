@@ -99,7 +99,7 @@ METHODS = [
                 "d": 6,
             },
             "linestyle": (0, (2, 3))
-        }, {
+        }, """{
             "name": "DyCG mean_diff reg 1",
             "method": DyCG,
             "params": {"decision": "mean_growth_rate", "reg": "1"},
@@ -129,7 +129,7 @@ METHODS = [
             "method": DyCG,
             "params": {"decision": "sign_poly_2_reg", "reg": "3"},
             "linestyle": (0, (2, 5))
-        },
+        },"""
     ]
 
 

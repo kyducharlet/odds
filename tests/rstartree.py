@@ -11,7 +11,7 @@ if __name__ == "__main__":
     for point in data_1:
         rst.insert_data(point.reshape(1, -1))
     for point in data_2:
-        rst.remove_data(1)
+        rst.remove_oldest(1)
         rst.insert_data(point.reshape(1, -1))
     ellapsed_time = time.time() - start
     print("Ellapsed time (building with 5k then remove/add 5k): {}s\n".format(ellapsed_time))
@@ -23,10 +23,9 @@ if __name__ == "__main__":
         rst_test_req.insert_data(point.reshape(1, -1))
     kNNs_last = rst_test_req.search_kNN(data[-1].reshape(1, -1))
     rst_test_req.insert_data(data[-1].reshape(1, -1))
-    rst_test_req.k += 1
-    RkNNs_kNNs_last = {o: rst_test_req.search_RkNN(o.low) for o in kNNs_last}
+    RkNNs_kNNs_last = {o: rst_test_req.search_RkNN(o) for o in kNNs_last}
     max_RkNNs = sorted([item for item in RkNNs_kNNs_last.items()], key=lambda elt: len(elt[1]))[0][0]
-    kNNs_max_RkNNs = {o: rst_test_req.search_kNN(o.low) for o in RkNNs_kNNs_last[max_RkNNs]}
+    kNNs_max_RkNNs = {o: rst_test_req.search_kNN(o) for o in RkNNs_kNNs_last[max_RkNNs]}
     ellapsed_time = time.time() - start
     for o in kNNs_last:
         print("{} is a kNN of {} with the following RkNNs:\n".format(o.low, data[-1].reshape(1, -1)))

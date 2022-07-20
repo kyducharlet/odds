@@ -111,14 +111,16 @@ class SimpleChristoffel(BaseDetector):
             raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
         self.__dict__["fit_shape"] = x.shape
         self.moments_matrix.fit(x)
-        if self.reg == "1":
+        if self.reg == "1":  # r * d * \alpha was the regulizer we used initially
             self.__dict__["regularizer"] = self.r * self.d * comb(self.d + x.shape[1], self.d)
-        elif self.reg == "2":
+        elif self.reg == "2":  # d ** {p+1} is the most inner border of the support
             self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 1)
-        elif self.reg == "3":
+        elif self.reg == "3":  # d ** {p+2} is the second most inner border of the support
             self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 2)
+        elif self.reg == "4":  # exp(\srt(d) * \alpha) is the most outter border of the support
+            self.__dict__["regularizer"] = np.exp(comb(self.d + x.shape[1], self.d) * np.sqrt(self.d))
         else:
-            raise ValueError("reg should be one of 1, 2 or 3")
+            raise ValueError("reg should be one of 1, 2, 3 or 4")
         return self
 
     def update(self, x):

@@ -3,6 +3,7 @@ from typing import Union
 
 from .base import BaseDetector, NotFittedError
 from .utils import search_kNN, compute_k_distance, compute_rd, compute_lrd, compute_lof, update_when_adding, update_when_removing
+from .utils import RStarTree
 
 
 class ILOF(BaseDetector):
@@ -128,14 +129,35 @@ class ILOF(BaseDetector):
 
 
 class ILOFv2(BaseDetector):
-    def __init__(self):
-        pass
+    def __init__(self, k: int, threshold=1.1, win_size: Union[type(None), int] = None, min_size=3, max_size=12, p=4, reinsert_strategy="close", n_trim_iterations=3):
+        self.threshold = threshold
+        self.k = k
+        self.win_size = win_size
+        if self.win_size is None:
+            self.select_update_f = self.__select_update_without_window__
+            self.select_fit_f = self.__select_fit_without_window__
+        else:
+            self.select_update_f = self.__select_update_with_window__
+            self.select_fit_f = self.__select_fit_with_window__
+        self.rst = RStarTree(k, min_size, max_size, p, reinsert_strategy, n_trim_iterations)
+        self.p = None
 
     def fit(self, x):
-        pass
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        x_fit = self.select_fit_f(x)
+        for xx in x_fit:
+            self.rst.insert_data(xx.reshape(1, -1))
 
     def update(self, x):
-        pass
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        x_add, x_update = self.select_update_f(x)
+        for xx in x_add:
+            self.rst.insert_data(xx.reshape(1, -1))
+        for xx in x_update:
+            self.rst.remove_oldest(1)
+            self.rst.insert_data(xx.reshape(1, -1))
 
     def score_samples(self, x):
         pass
@@ -148,6 +170,21 @@ class ILOFv2(BaseDetector):
 
     def eval_update(self, x):
         pass
+
+    def __select_fit_with_window__(self, x):
+        return x[-self.win_size:]
+
+    def __select_fit_without_window__(self, x):
+        return x
+
+    def __select_update_with_window__(self, x):
+        if len(self.rst.objects) < self.win_size:
+            return x[:self.win_size - len(self.rst.objects)], x[self.win_size - len(self.rst.objects):]
+        else:
+            return x[:0], x[0:]
+
+    def __select_update_without_window__(self, x):
+        return x[0:], x[:0]
 
     def copy(self):
         pass
