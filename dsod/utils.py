@@ -165,7 +165,6 @@ class RStarTree:
 
     def insert_data(self, x):
         obj = RStarTreeObject(x, x)
-        obj.kNN = self.search_kNN(obj)
         self.root.insert_data(obj)
         self.objects.append(obj)
 
@@ -174,10 +173,11 @@ class RStarTree:
             obj = self.objects.pop(0)
             obj.__remove__()
 
-    def search_kNN(self, obj):
+    def search_kNN(self, x):
+        obj = RStarTreeObject(x, x)
         res = self.k * [(np.infty, None)]
-        self.__search_kNN__(self.root, obj, res)
-        return res
+        res = self.__search_kNN__(self.root, obj, res)
+        return [o[1] for o in res]
 
     def __search_kNN__(self, node, obj, res):
         if node.level == node.leaf_level:
@@ -190,25 +190,22 @@ class RStarTree:
                         new_res = [(d, o) for (d, o) in res if d < res[-1][0]]
                         if len(new_res) >= self.k:
                             res = new_res
+            return res
         else:
             branch_list = sorted([(obj.__compute_mindist__(r), obj.__compute_minmaxdist__(r), r) for r in node.children], key=lambda elt: elt[0])
             max_possible_dist = min(np.min([elt[1] for elt in branch_list]), res[-1][0])
             branch_list = [elt for elt in branch_list if elt[0] <= max_possible_dist]
             for elt in branch_list:
-                self.__search_kNN__(elt[2], obj, res)
+                res = self.__search_kNN__(elt[2], obj, res)
                 while len(branch_list) > 0 and branch_list[-1][0] > res[-1][0]:
                     branch_list.pop()
+            return res
 
-    def search_RkNN(self, obj):
-        pass
-
-    def __search_RkNN_trim__(self, obj, Scnd, node):
-        trimmed_square = RStarTreeObject(node.low.copy(), node.high.copy())
-        for cand_comb in itertools.combinations(Scnd, self.k):
-            trimmed_square = trimmed_square.__clip__(obj, cand_comb, self.I)
-            if trimmed_square.contains_nan():
-                return np.infty
-        return obj.__compute_mindist__(trimmed_square)
+    def search_RkNN(self, x):
+        obj = RStarTreeObject(x, x)
+        Scnd, Prfn, Nrfn = self.__search_RkNN_filter__(obj)
+        Srnn = self.__search_RkNN_refinement__(obj, Scnd, Prfn, Nrfn)
+        return Srnn
 
     def __search_RkNN_filter__(self, obj):
         h = []
@@ -221,7 +218,7 @@ class RStarTree:
                 Srfn.append(elt)
             else:
                 if type(elt) != RStarTreeNode:
-                    Scnd.append(elt)
+                    Scnd.append([elt, self.k])
                 elif elt.level == elt.leaf_level:
                     for dist, point in sorted(zip([p.__compute_dist__(obj) for p in elt.children], elt.children), key=lambda p: p[0]):
                         if self.__search_RkNN_trim__(obj, Scnd, point) == np.infty:
@@ -239,15 +236,25 @@ class RStarTree:
         Nrfn = [elt for elt in Srfn if type(elt) == RStarTreeNode]
         return Scnd, Prfn, Nrfn
 
+    def __search_RkNN_trim__(self, obj, Scnd, node):
+        trimmed_square = RStarTreeObject(node.low.copy(), node.high.copy())
+        for cand_comb in itertools.combinations([o[0] for o in Scnd], self.k):
+            trimmed_square = trimmed_square.__clip__(obj, cand_comb, self.I)
+            if trimmed_square.contains_nan():
+                return np.infty
+        return obj.__compute_mindist__(trimmed_square)
+
     def __search_RkNN_refinement__(self, obj, Scnd, Prfn, Nrfn):
         Srnn = []
         Scnd_ = 1 * Scnd
         for p in Scnd:
             for p_ in Scnd_:
-                if p_ != p:
-                    if p.__compute_dist__(p_) < p.__compute_dist__(obj):
-                        Scnd_.remove(p)
-                        break
+                if p_[0] != p[0]:
+                    if p[0].__compute_dist__(p_[0]) < p[0].__compute_dist__(obj):
+                        p[1] -= 1
+                        if p[1] == 0:
+                            Scnd_.remove(p)
+                            break
         Scnd = Scnd_
         while len(Scnd) != 0:
             Scnd, to_visit, Srnn = self.__search_RkNN_refinement_round__(obj, Scnd, Prfn, Nrfn, Srnn)
@@ -270,6 +277,7 @@ class RStarTree:
                 Prfn.extend(best_node.children)
             else:
                 Nrfn.extend(best_node.children)
+        return Srnn
 
     def __search_RkNN_refinement_round__(self, obj, Scnd, Prfn, Nrfn, Srnn):
         to_visit = []
@@ -278,22 +286,26 @@ class RStarTree:
             to_visit_p = []
             valid = True
             for p_ in Prfn:
-                if p.__compute_dist__(p_) < p.__compute_dist__(obj):
-                    Scnd_.remove(p)
-                    valid = False
-                    break
-            if valid:
-                for node in Nrfn:
-                    if p.__compute_minmaxdist__(node) < p.__compute_dist__(obj):
+                if p[0].__compute_dist__(p_) < p[0].__compute_dist__(obj):
+                    p[1] -= 1
+                    if p[1] == 0:
                         Scnd_.remove(p)
                         valid = False
                         break
+            if valid:
+                for node in Nrfn:
+                    if p[0].__compute_minmaxdist__(node) < p[0].__compute_dist__(obj):
+                        p[1] -= 1
+                        if p[1] == 0:
+                            Scnd_.remove(p)
+                            valid = False
+                            break
                 if valid:
                     for node in Nrfn:
-                        if p.__compute_mindist__(node) < p.dist(obj):
+                        if p[0].__compute_mindist__(node) < p[0].dist(obj):
                             to_visit_p.append(node)
                     if len(to_visit_p) == 0:
-                        Srnn.append(p)
+                        Srnn.append(p[0])
                         Scnd_.remove(p)
                     else:
                         to_visit.append(to_visit_p)
@@ -511,8 +523,8 @@ class RStarTreeNode:
         return new_overlap - old_overlap
 
     def __adjust_mbr__(self):
-        old_low = self.low.copy()
-        old_high = self.high.copy()
+        old_low = self.low.copy() if self.low is not None else None
+        old_high = self.high.copy() if self.high is not None else None
         self.low = np.min([r.low for r in self.children], axis=0)
         self.high = np.max([r.high for r in self.children], axis=0)
         if self.parent is not None and not ((self.low == old_low).all() and (self.high == old_high).all()):
@@ -575,16 +587,17 @@ class RStarTreeObject:
                 return self
             else:
                 a_arr = a_arr[np.where(d_arr <= 0)[0]]
-                d_arr = d_arr[np.where(d_arr <= 0)]
+                d_arr = d_arr[np.where(d_arr <= 0)[0]]
                 for j in range(a_arr.shape[1]):
                     if (a_arr[:, j] > 0).all():
-                        self.low[0, j] = np.minimum([np.max(self.low[0, j], self.high[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                        self.low[0, j] = np.min([np.maximum(self.low[0, j], self.high[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
                     elif (a_arr[:, j] < 0).all():
-                        self.low[0, j] = np.maximum([np.min(self.high[0, j], self.low[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                        self.low[0, j] = np.max([np.minimum(self.high[0, j], self.low[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
                 if (self.low == old_low).all() and (self.high == old_high).all():
                     return self
                 else:
                     cpt += 1
+        return self
 
     def __remove__(self):
         self.parent.remove_data(self)
