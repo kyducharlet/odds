@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import linalg
+from hilbertcurve import hilbertcurve
 import itertools
 import heapq
 
@@ -156,11 +157,12 @@ def update_when_removing(points, index_dead, kNNs, k_distances, rds, lrds, lofs,
 
 
 class RStarTree:
-    def __init__(self, k, min_size=3, max_size=12, p=4, reinsert_strategy="close", n_trim_iterations=3):
+    def __init__(self, k, min_size=3, max_size=12, p_reinsert_tol=4, reinsert_strategy="close", n_trim_iterations=3, p_hilbert_curve=4):
         self.k = k
         self.levels = [RStarTreeLevel(0)]
-        self.root = RStarTreeNode(min_size, max_size, p, level=self.levels[0], leaf_level=self.levels[-1], reinsert_strategy=reinsert_strategy, tree=self)
+        self.root = RStarTreeNode(min_size, max_size, p_reinsert_tol, level=self.levels[0], leaf_level=self.levels[-1], reinsert_strategy=reinsert_strategy, tree=self)
         self.I = n_trim_iterations
+        self.p_hc = p_hilbert_curve
         self.objects = []
 
     def insert_data(self, x):
@@ -170,9 +172,12 @@ class RStarTree:
         return obj
 
     def remove_oldest(self, n):
+        objects = []
         for i in range(n):
             obj = self.objects.pop(0)
             obj.__remove__()
+            objects.append(obj)
+        return objects
 
     def remove_data(self, obj):
         self.objects.remove(obj)
@@ -206,7 +211,8 @@ class RStarTree:
             return res
         else:
             branch_list = sorted([(obj.__compute_mindist__(r), obj.__compute_minmaxdist__(r), r) for r in node.children], key=lambda elt: elt[0])
-            max_possible_dist = min(np.min([elt[1] for elt in branch_list]), res[-1][0])
+            # max_possible_dist = min(np.min([elt[1] for elt in branch_list]), res[-1][0])  # do not work with k>1
+            max_possible_dist = res[-1][0]
             branch_list = [elt for elt in branch_list if elt[0] <= max_possible_dist]
             for elt in branch_list:
                 res = self.__search_kNN__(elt[2], obj, res)
@@ -259,10 +265,24 @@ class RStarTree:
 
     def __search_RkNN_trim__(self, obj, Scnd, node):
         trimmed_square = RStarTreeObject(node.low.copy(), node.high.copy())
-        for cand_comb in itertools.combinations([o[0] for o in Scnd], self.k):
-            trimmed_square = trimmed_square.__clip__(obj, cand_comb, self.I)
-            if trimmed_square.contains_nan():
-                return np.infty
+        if len(Scnd) >= self.k:
+            Scnd_ = [elt[0] for elt in Scnd]
+            hc = hilbertcurve.HilbertCurve(self.p_hc, obj.high.shape[1])
+            coord = np.array([cnd.low for cnd in Scnd_]).reshape(len(Scnd_), obj.low.shape[1])
+            min_coord = np.min(coord, axis=0)
+            div_coord = np.max(coord, axis=0) - min_coord
+            div_coord[div_coord == 0] = 1
+            coord = hc.max_x * (coord - min_coord) / div_coord
+            dists = hc.distances_from_points(np.round(coord))
+            Scnd_ = sorted(zip(Scnd_, dists), key=lambda elt: elt[1])
+            Scnd_ = [elt[0] for elt in Scnd_]
+            Scnd_ring = Scnd_ + Scnd_[:-1]
+            # for cand_comb in itertools.combinations([o[0] for o in Scnd], self.k):
+            # if True: pass
+            for cand_comb in [Scnd_ring[i:self.k+i] for i in range(len(Scnd))]:
+                trimmed_square = trimmed_square.__clip__(obj, cand_comb, self.I)
+                if trimmed_square.contains_nan():
+                    return np.infty
         return obj.__compute_mindist__(trimmed_square)
 
     def __search_RkNN_refinement__(self, obj, Scnd, Prfn, Nrfn):
@@ -342,12 +362,12 @@ class RStarTree:
 
 
 class RStarTreeNode:
-    def __init__(self, min_size, max_size, p, level, leaf_level, parent=None, reinsert_strategy="close", tree=None):
+    def __init__(self, min_size, max_size, p_reinsert_tol, level, leaf_level, parent=None, reinsert_strategy="close", tree=None):
         self.parent = parent
         assert 2 <= min_size <= max_size / 2, "It is required that 2 <= min_size <= max_size / 2."
         self.min_size = min_size
         self.max_size = max_size
-        self.p = p
+        self.p = p_reinsert_tol
         assert reinsert_strategy in ["close", "far"], "'reinsert_strategy' should be either 'close' or 'far'."
         self.reinsert_strategy = reinsert_strategy
         self.level = level
@@ -482,7 +502,7 @@ class RStarTreeNode:
             new_root = self.tree.__create_new_root__()
             new_root.__insert__(self, new_root.level)
             self.tree = None
-        new_node = RStarTreeNode(min_size=self.min_size, max_size=self.max_size, p=self.p, level=self.level, leaf_level=self.leaf_level, parent=self.parent, reinsert_strategy=self.reinsert_strategy)
+        new_node = RStarTreeNode(min_size=self.min_size, max_size=self.max_size, p_reinsert_tol=self.p, level=self.level, leaf_level=self.leaf_level, parent=self.parent, reinsert_strategy=self.reinsert_strategy)
         for r in second_group:
             self.children.remove(r)
             new_node.__insert__(r, level=new_node.level)
@@ -554,13 +574,15 @@ class RStarTreeNode:
     def __get_root__(self):
         return self if self.parent is None else self.parent.__get_root__()
 
+    def __lt__(self, other):
+        return np.product(self.high - self.low) < np.product(other.high - other.low)
+
 
 class RStarTreeObject:
     def __init__(self, low: np.ndarray, high: np.ndarray):
         self.low = low
         self.high = high
         self.parent = None
-        self.kNN = None
 
     def __compute_volume__(self):
         return np.product(self.high - self.low)
@@ -586,45 +608,60 @@ class RStarTreeObject:
         ]) for i in range(self.low.shape[1])])
 
     def __clip__(self, ref_point, clipping_points, I):
-        old_low = self.low.copy()
-        old_high = self.high.copy()
-        a = []
-        b = []
-        z = []
-        d = []
+        a = np.zeros((len(clipping_points), self.low.shape[1]))
+        b = np.zeros((len(clipping_points), 1))
+        z = a.copy()
+        d = b.copy()
         cpt = 0
         while(cpt <= I):
+            old_low = self.low.copy()
+            old_high = self.high.copy()
             for i in range(len(clipping_points)):
-                a.append(ref_point.low - clipping_points[i].low)
-                b.append((np.linalg.norm(ref_point.low) - np.linalg.norm(clipping_points[i].low)) / 2)
-                z.append(self.high.copy())
-                z[i][np.where(a[i] <= 0)] = self.low[np.where(a[i] <= 0)]
-                d.append(b[i] - np.dot(a[i].reshape(-1), z[i].reshape(-1)))
-            a_arr = np.array(a).reshape(-1, self.low.shape[1])
-            d_arr = np.array(d).reshape(-1, 1)
-            if (d_arr > 0).all():
+                a[i] = ref_point.low - clipping_points[i].low
+                b[i] = (np.square(np.linalg.norm(ref_point.low)) - np.square(np.linalg.norm(clipping_points[i].low))) / 2
+                z[i] = self.high.copy()
+                z[i][np.where(a[i] <= 0)] = self.low[0][np.where(a[i] <= 0)]
+                d[i] = b[i] - np.dot(a[i].reshape(-1), z[i].reshape(-1))
+            if (d > 0).all():
                 self.low = np.nan * self.low
                 self.high = np.nan * self.high
                 return self
+            elif self.__is_point__():
+                return self
             else:
-                a_arr = a_arr[np.where(d_arr <= 0)[0]]
-                d_arr = d_arr[np.where(d_arr <= 0)[0]]
-                for j in range(a_arr.shape[1]):
-                    if (a_arr[:, j] > 0).all():
-                        self.low[0, j] = np.min([np.maximum(self.low[0, j], self.high[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
-                    elif (a_arr[:, j] < 0).all():
-                        self.low[0, j] = np.max([np.minimum(self.high[0, j], self.low[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                a_red = a[np.where(d <= 0)[0]]
+                d_red = d[np.where(d <= 0)[0]]
+                for j in range(a_red.shape[1]):
+                    if (a_red[:, j] > 0).all():
+                        # self.low[0, j] = np.min([np.maximum(self.low[0, j], self.high[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                        possibilities = [np.maximum(self.low[0, j], self.high[0, j] + d_red[i, 0] / a_red[i, j]) for i in range(a_red.shape[0])]
+                        self.low[0, j] = np.min(possibilities)
+                    elif (a_red[:, j] < 0).all():
+                        # self.high[0, j] = np.max([np.minimum(self.high[0, j], self.low[0, j] + d_arr[i, 0] / a_arr[i, j]) for i in range(a_arr.shape[0])])
+                        possibilities = [np.minimum(self.high[0, j], self.low[0, j] + d_red[i, 0] / a_red[i, j]) for i in range(a_red.shape[0])]
+                        self.high[0, j] = np.max(possibilities)
                 if (self.low == old_low).all() and (self.high == old_high).all():
                     return self
                 else:
                     cpt += 1
         return self
 
+    def __is_point__(self):
+        return (self.high - self.low == 0).all()
+
     def __remove__(self):
-        self.parent.remove_oldest(self)
+        self.parent.remove_data(self)
+
+    def __lt__(self, other):
+        return np.product(self.high - self.low) < other.product(self.high - self.low)
 
     def contains_nan(self):
         return np.isnan(self.low).any() or np.isnan(self.high).any()
+
+    def copy(self):
+        r_ = RStarTreeObject(self.low.copy(), self.high.copy())
+        r_.parent = self.parent
+        return r_
 
 
 class RStarTreeLevel:
