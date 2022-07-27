@@ -218,6 +218,7 @@ class ILOFv2(BaseDetector):
         for obj in objects_list:
             obj.__dict__["__kNNs__"] = self.rst.search_kNN(obj)
             obj.__dict__["__k_dist__"] = obj.__compute_dist__(obj.__dict__["__kNNs__"][-1])
+            obj.parent.__update_k_dist__(obj)
         for obj in objects_list:
             obj.__dict__["__rds__"] = []
             if obj.__dict__.get("__RkNNs__") is None:
@@ -238,9 +239,10 @@ class ILOFv2(BaseDetector):
         obj.__dict__["__kNNs__"] = kNNs
         ### Set obj k-distance
         obj.__dict__["__k_dist__"] = obj.__compute_dist__(kNNs[-1])
+        obj.parent.__update_k_dist__(obj)
         ### Set obj RkNNs
-        # S_update_k_distance = self.rst.search_RkNN(obj)
-        S_update_k_distance = self.__search_RkNNs__(obj)
+        S_update_k_distance = self.rst.search_RkNN(obj)
+        # S_update_k_distance = self.__search_RkNNs__(obj)
         obj.__dict__["__RkNNs__"] = S_update_k_distance
         ### Update k-distance (if required), kNNs and rds
         S_k_distance_updated = []
@@ -260,6 +262,7 @@ class ILOFv2(BaseDetector):
                 o.__dict__["__kNNs__"] = [elt[1] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]
                 o.__dict__["__rds__"] = [elt[2] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]
                 o.__dict__["__k_dist__"] = [elt[0] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]][-1]
+                o.parent.__update_k_dist__(o)
                 S_k_distance_updated.append(o)
         ### Compute obj rds and add obj to RkNNs of its kNNs
         obj.__dict__["__rds__"] = []
@@ -283,6 +286,7 @@ class ILOFv2(BaseDetector):
         obj.__dict__["__lof__"] = np.mean([o.__dict__["__lrd__"] for o in kNNs]) / obj.__dict__["__lrd__"]
 
     def __update_metrics_deletion__(self, obj):
+        obj.parent.__update_k_dist__(obj)
         S_update_k_distance = obj.__dict__["__RkNNs__"]
         ### Remove obj from the RkNNs list of its kNNs
         for o in obj.__dict__["__kNNs__"]:
@@ -299,6 +303,7 @@ class ILOFv2(BaseDetector):
                 ### We need to update the k-distance with a new kthNN
                 o.__dict__["__kNNs__"] = self.rst.search_kNN(o)
                 o.__dict__["__k_dist__"] = o.__compute_dist__(o.__dict__["__kNNs__"][-1])
+                o.parent.__update_k_dist__(o)
                 new_kNNs = o.__dict__["__kNNs__"][-1 - (len(o.__dict__["__kNNs__"]) - self.k):]
                 for new_kNN in new_kNNs:
                     new_kNN.__dict__["__RkNNs__"].append(o)
@@ -318,13 +323,9 @@ class ILOFv2(BaseDetector):
 
     def __search_RkNNs__(self, obj):
         RkNNs = []
-        obj.parent.children.remove(obj)
-        obj.parent.__adjust_mbr__()
         for o in self.rst.objects:
             if o.__compute_dist__(obj) <= o.__dict__["__k_dist__"] and o != obj:
                 RkNNs.append(o)
-        obj.parent.children.append(obj)
-        obj.parent.__adjust_mbr__()
         return RkNNs
 
     def copy(self):

@@ -220,7 +220,7 @@ class RStarTree:
                     branch_list.pop()
             return res
 
-    def search_RkNN(self, obj):
+    """def search_RkNN(self, obj):
         if type(obj) == np.ndarray:
             obj_ = RStarTreeObject(obj, obj)
         else:
@@ -350,7 +350,23 @@ class RStarTree:
                         Scnd_.remove(p)
                     else:
                         to_visit.append(to_visit_p)
-        return Scnd_, to_visit, Srnn
+        return Scnd_, to_visit, Srnn"""
+
+    def search_RkNN(self, obj):
+        if type(obj) == np.ndarray:
+            obj_ = RStarTreeObject(obj, obj)
+        else:
+            obj_ = obj
+            obj.parent.children.remove(obj)
+            obj.parent.__adjust_mbr__()
+
+        RkNN = []
+        self.root.__find_reachable__(obj_, RkNN)
+
+        if type(obj) != np.ndarray:
+            obj.parent.children.append(obj)
+            obj.parent.__adjust_mbr__()
+        return RkNN
 
     def __create_new_root__(self):
         for level in self.levels:
@@ -377,6 +393,8 @@ class RStarTreeNode:
         self.low = None
         self.children = []
 
+        self.max_k_dist = [0, None]
+
     def insert_data(self, obj):
         self.__insert__(obj, self.leaf_level)
 
@@ -389,6 +407,7 @@ class RStarTreeNode:
     def __insert__(self, obj, level):
         chosen_node = self.__chose_subtree__(obj, level)
         chosen_node.children.append(obj)
+        chosen_node.__adjust_k_dist__()
         obj.parent = chosen_node
         if len(chosen_node.children) > self.max_size:
             chosen_node.__overflow_treatment__(chosen_node.level)
@@ -573,6 +592,44 @@ class RStarTreeNode:
 
     def __get_root__(self):
         return self if self.parent is None else self.parent.__get_root__()
+
+    def __update_k_dist__(self, obj):
+        if obj == self.max_k_dist[1]:
+            if self.max_k_dist[0] < obj.__dict__["__k_dist__"]:  # The max k-distance has increased and needs to be updated
+                self.max_k_dist[0] = obj.__dict__["__k_dist__"]
+            elif self.max_k_dist[0] > obj.__dict__["__k_dist__"]:  # The max k-distance has decreased and needs to be chosen again and updated
+                if self.level == self.leaf_level:
+                    self.max_k_dist = sorted([[o.__dict__["__k_dist__"], o] for o in self.children if o.__dict__.get("__k_dist__") is not None], key=lambda elt: -1 * elt[0])[0]
+                else:
+                    self.max_k_dist = sorted([c.max_k_dist for c in self.children], key=lambda elt: -1 * elt[0])[0]
+            if self.parent is not None:
+                self.parent.__update_k_dist__(obj)
+        else:
+            if self.max_k_dist[0] < obj.__dict__["__k_dist__"]:  # The obj k-distance needs to replace the current max k-distance
+                self.max_k_dist = [obj.__dict__["__k_dist__"], obj]
+                if self.parent is not None:
+                    self.parent.__update_k_dist__(obj)
+
+    def __adjust_k_dist__(self):
+        old_mkd = self.max_k_dist
+        if self.level == self.leaf_level:
+            res = sorted([[o.__dict__["__k_dist__"], o] for o in self.children if o.__dict__.get("__k_dist__") is not None], key=lambda elt: -1 * elt[0])
+            if len(res) != 0:
+                self.max_k_dist = res[0]
+        else:
+            self.max_k_dist = sorted([c.max_k_dist for c in self.children], key=lambda elt: -1 * elt[0])[0]
+        if self.max_k_dist != old_mkd and self.parent is not None:
+            self.parent.__adjust_k_dist__()
+
+    def __find_reachable__(self, obj, list):
+        if self.level != self.leaf_level:
+            for c in self.children:
+                if obj.__compute_mindist__(c) <= c.max_k_dist[0]:
+                    c.__find_reachable__(obj, list)
+        else:
+            for c in self.children:
+                if obj.__compute_dist__(c) <= c.__dict__["__k_dist__"]:
+                    list.append(c)
 
     def __lt__(self, other):
         return np.product(self.high - self.low) < np.product(other.high - other.low)
