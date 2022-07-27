@@ -407,7 +407,7 @@ class RStarTreeNode:
     def __insert__(self, obj, level):
         chosen_node = self.__chose_subtree__(obj, level)
         chosen_node.children.append(obj)
-        chosen_node.__adjust_k_dist__()
+        # chosen_node.__adjust_k_dist__()
         obj.parent = chosen_node
         if len(chosen_node.children) > self.max_size:
             chosen_node.__overflow_treatment__(chosen_node.level)
@@ -513,6 +513,7 @@ class RStarTreeNode:
         root = self.__get_root__()
         for r in to_reinsert:
             root.__insert__(r, self.level)
+            r.parent.__adjust_k_dist__()
 
     def __split__(self):
         split_axis = self.__chose_split_axis__()
@@ -527,6 +528,8 @@ class RStarTreeNode:
             new_node.__insert__(r, level=new_node.level)
         self.__adjust_mbr__()
         self.parent.__insert__(new_node, level=self.parent.level)
+        self.__adjust_k_dist__()
+        new_node.__adjust_k_dist__()
 
     def __chose_split_axis__(self):
         best_axis = (-1, np.infty)
