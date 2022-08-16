@@ -12,7 +12,6 @@ from dsod.density import ILOF
 from dsod.statistics import SlidingMKDE, SimpleChristoffel, DyCG
 from dsod.plotter import LevelsetPlotter
 
-
 METHODS = [
         {
             "name": "OSCOD k=10",
@@ -233,7 +232,7 @@ def plot(methods, x_train, x_test, y_test, savename):
     plt.show()
 
 
-def compute(methods, x_train, x_test, y_test, savename):
+def compute(methods, x_train, x_test, y_test, savename, close=False):
     y_decisions = dict()
     y_preds = dict()
     for method in methods:
@@ -260,7 +259,7 @@ def compute(methods, x_train, x_test, y_test, savename):
                 y_preds[method["name"]] = y_pred
                 with open(filename, "wb") as f:
                     pickle.dump(results, f)
-    cols = ["f1_out", "f1_in", "roc_auc", "balanced_acc"]
+    cols = ["f1_out", "f1_in", "f1_mean", "roc_auc", "balanced_acc"]
     rows = []
     table = []
     with warnings.catch_warnings():
@@ -268,20 +267,27 @@ def compute(methods, x_train, x_test, y_test, savename):
         for method in methods:
             if type(method) == dict:
                 rows.append(method["name"])
-                f1_out = f1_score(y_test, y_preds[method["name"]], pos_label=-1)
-                f1_in = f1_score(y_test, y_preds[method["name"]], pos_label=1)
-                roc_auc = roc_auc_score(y_test, y_decisions[method["name"]])
-                balanced_accuracy = balanced_accuracy_score(y_test, y_preds[method["name"]])
-                res = [f1_out, f1_in, roc_auc, balanced_accuracy]
+                y_pred = y_preds[method["name"]]
+                y_deci = y_decisions[method["name"]]
+                f1_out = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=-1)
+                f1_in = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=1)
+                f1_mean = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], average="macro")
+                roc_auc = roc_auc_score(y_test[~np.isnan(y_deci)], y_deci[~np.isnan(y_deci)])
+                balanced_accuracy = balanced_accuracy_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)])
+                res = [f1_out, f1_in, f1_mean, roc_auc, balanced_accuracy]
                 table.append(['%1.3f' % v for v in res])
     fig, ax = plt.subplots()
     fig.patch.set_visible(False)
     ax.axis('off')
     ax.axis('tight')
     ax.table(cellText=table, rowLabels=rows, colLabels=cols, loc="center")
+    df = pd.DataFrame(data=table, columns=cols, index=rows)
+    df.to_excel(f"final_metrics_{savename}.xlsx")
     fig.tight_layout()
     plt.savefig("final_metrics_" + savename + ".png")
     plt.show()
+    if close:
+        plt.close()
 
 
 if __name__ == "__main__":
