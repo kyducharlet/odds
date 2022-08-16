@@ -111,16 +111,20 @@ class SimpleChristoffel(BaseDetector):
             raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
         self.__dict__["fit_shape"] = x.shape
         self.moments_matrix.fit(x)
-        if self.reg == "1":  # r * d * \alpha was the regulizer we used initially
+        if self.reg == "1":  # \alpha is the most basic regularizer
+            self.__dict__["regularizer"] =comb(self.d + x.shape[1], self.d)
+        elif self.reg == "2":  # r * d * \alpha was the regulizer we used initially
             self.__dict__["regularizer"] = self.r * self.d * comb(self.d + x.shape[1], self.d)
-        elif self.reg == "2":  # d ** {p+1} is the most inner border of the support
+        elif self.reg == "3":  # d ** {p+1} is the most inner border of the support
             self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 1)
-        elif self.reg == "3":  # d ** {p+2} is the second most inner border of the support
+        elif self.reg == "4":  # d ** {p+2} is the second most inner border of the support
             self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 2)
-        elif self.reg == "4":  # exp(\srt(d) * \alpha) is the most outter border of the support
+        elif self.reg == "5":  # exp(\srt(d) * \alpha) is the most outter border of the support
             self.__dict__["regularizer"] = np.exp(comb(self.d + x.shape[1], self.d) * np.sqrt(self.d))
+        elif self.reg == "6":  # d ** {p+3} is between d ** {p+2} and exp(\srt(d) * \alpha)
+            self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 3)
         else:
-            raise ValueError("reg should be one of 1, 2, 3 or 4")
+            raise ValueError("reg should be one of 1, 2, 3, 4, 5 or 6")
         return self
 
     def update(self, x):
@@ -185,7 +189,7 @@ class SimpleChristoffel(BaseDetector):
 
 class DyCG(BaseDetector):
     def __init__(self, degrees: np.ndarray = np.array(range(2, 9)), r: float = 0.5, forget_factor: Union[float, type(None)] = None,
-                 decision="sign_poly_2_reg", reg="1"):
+                 decision="mean_growth", reg="6"):
         assert len(degrees) > 1
         self.degrees = degrees
         self.models = [SimpleChristoffel(d=d, r=r, forget_factor=forget_factor, reg=reg) for d in degrees]
@@ -213,16 +217,22 @@ class DyCG(BaseDetector):
             scores = np.array([m.score_samples(d_)[0] for m in self.models])
             s_diff = np.diff(scores) / np.diff(self.degrees)
             if self.decision == "sign_poly_2_reg":
-                score[i] = curve_fit(
-                    lambda x, a, b: a * x ** 2 + b,
-                    xdata=self.degrees,
-                    ydata=scores,
-                )[0][0]
+                try:
+                    score[i] = curve_fit(
+                        lambda x, a, b: a * x ** 2 + b,
+                        xdata=self.degrees,
+                        ydata=scores,
+                    )[0][0]
+                except RuntimeError:
+                    score[i] = np.nan
+            elif self.decision == "mean_growth":
+                score[i] = np.mean(s_diff)
             elif self.decision == "mean_growth_rate":
                 score[i] = np.mean(s_diff / scores[:-1])
-                # score[i] = np.mean((scores - scores[0])[1:])
+            elif self.decision == "mean_score":
+                score[i] = np.mean(scores) - 1
             else:
-                raise ValueError("decision should be one of sign_poly_2_reg or mean_growth_rate, but we should have told you before :p")
+                raise ValueError("decision should be one of sign_poly_2_reg, mean_growth, mean_score or mean_growth_rate, but we should have told you before :p")
         return score
 
     def decision_function(self, x):
