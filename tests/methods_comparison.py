@@ -1,6 +1,15 @@
-from dsod.statistics import SimpleChristoffel, DyCG
+from sklearn.metrics import f1_score, roc_auc_score, balanced_accuracy_score
+from sklearn.exceptions import UndefinedMetricWarning
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 import warnings
-from tests.methods_comparison import load_dataset, split_data, compute
+import pickle
+from tqdm import tqdm
+
+from dsod.distance import OSCOD, OSMCOD
+from dsod.density import ILOF
+from dsod.statistics import SlidingMKDE, SimpleChristoffel, DyCG
 
 
 METHODS = [
@@ -198,6 +207,78 @@ METHODS = [
         }
     }
 ]
+
+
+def load_dataset(filename):
+    data = pd.read_csv(filename, index_col=0).values
+    min = np.min(data, axis=0)[:-1]
+    max = np.max(data, axis=0)[:-1]
+    data[:, :-1] = 2 * (((data[:, :-1] - min) / (max - min)) - .5)
+    return data
+
+
+def split_data(data, split_pos):
+    train = data[:split_pos]
+    test = data[split_pos:]
+    return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
+
+
+def compute(methods, x_train, x_test, y_test, savename, close=False):
+    y_decisions = dict()
+    y_preds = dict()
+    for method in methods:
+        if type(method) == dict:
+            filename = savename + "__" + method["name"] + ".pickle"
+            try:
+                with open(filename, "rb") as f:
+                    results = pickle.load(f)
+                y_decisions[method["name"]] = results["y_decision"]
+                y_preds[method["name"]] = results["y_pred"]
+            except FileNotFoundError:
+                model = method["method"](**method["params"])
+                model.fit(x_train)
+                y_decision = np.zeros(len(y_test))
+                y_pred = np.zeros(len(y_test))
+                for i in tqdm(range(len(x_test)), desc=method["name"]):
+                    y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
+                    y_pred[i] = -1 if y_decision[i] < 0 else 1
+                results = {
+                    "y_decision": y_decision,
+                    "y_pred": y_pred,
+                }
+                y_decisions[method["name"]] = y_decision
+                y_preds[method["name"]] = y_pred
+                with open(filename, "wb") as f:
+                    pickle.dump(results, f)
+    cols = ["f1_out", "f1_in", "f1_mean", "roc_auc", "balanced_acc"]
+    rows = []
+    table = []
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error")
+        for method in methods:
+            if type(method) == dict:
+                rows.append(method["name"])
+                y_pred = y_preds[method["name"]]
+                y_deci = y_decisions[method["name"]]
+                f1_out = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=-1)
+                f1_in = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=1)
+                f1_mean = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], average="macro")
+                roc_auc = roc_auc_score(y_test[~np.isnan(y_deci)], y_deci[~np.isnan(y_deci)])
+                balanced_accuracy = balanced_accuracy_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)])
+                res = [f1_out, f1_in, f1_mean, roc_auc, balanced_accuracy]
+                table.append(['%1.3f' % v for v in res])
+    fig, ax = plt.subplots()
+    fig.patch.set_visible(False)
+    ax.axis('off')
+    ax.axis('tight')
+    ax.table(cellText=table, rowLabels=rows, colLabels=cols, loc="center")
+    df = pd.DataFrame(data=table, columns=cols, index=rows)
+    df.to_excel(f"final_metrics_{savename}.xlsx")
+    fig.tight_layout()
+    plt.savefig("final_metrics_" + savename + ".png")
+    plt.show()
+    if close:
+        plt.close()
 
 
 if __name__ == "__main__":
