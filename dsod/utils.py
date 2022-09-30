@@ -829,7 +829,7 @@ class MTree:
             self.parent.children[new_Mtree] = dist
             self.parent.radius = max(self.parent.radius, dist + radius_2)
             if len(self.parent.children.keys()) > self.M:
-                return self.parent.__split__()
+                return self.parent.split()
             else:
                 return self.__get_root__()
         else:
@@ -979,8 +979,27 @@ class MTreeMicroCluster:
 """ Methods and classes used by SimpleChristoffel and DyCG """
 
 
+def monomials(x, n):
+    return np.power(x, n)
+
+
+def tchebychev(x, n):
+    if x < -1:
+        return (-1)**n * np.cosh(n * np.arccosh(-x)) / np.sqrt((np.pi if n == 0 else np.pi / 2))
+    elif x > 1:
+        return np.cosh(n * np.arccosh(x)) / np.sqrt((np.pi if n == 0 else np.pi / 2))
+    else:
+        return np.cos(n * np.arccos(x)) / np.sqrt((np.pi if n == 0 else np.pi / 2))
+
+
+IMPLEMENTED_POLYNOMIAL_BASIS = {
+    "monomials": monomials,
+    "tchebychev": tchebychev,
+}
+
+
 class MomentsMatrix:
-    def __init__(self, d, forget_factor=None, incr_opt="inv"):
+    def __init__(self, d, forget_factor=None, incr_opt="wood"):
         self.d = d
         self.forget_factor = forget_factor
         self.incr_opt = incr_opt
@@ -1099,10 +1118,10 @@ class Monomials:
         return sorted(mono, key=lambda e: (np.sum(list(e)), list(-1 * np.array(list(e)))))
 
     @staticmethod
-    def apply_combinations(x, m):
+    def apply_combinations(x, m, basis="tchebychev"):
         if type(m) == tuple:
             assert x.shape[1] == len(m)
-            result = np.power(x, list(m))
+            result = np.array([IMPLEMENTED_POLYNOMIAL_BASIS[basis](x, n) for n in m])
             result = np.product(result, axis=1).reshape(-1, 1)
             return result
         elif type(m) == list:
@@ -1111,7 +1130,7 @@ class Monomials:
                 results = results.astype(object)
             for i, mm in enumerate(m):
                 assert x.shape[1] == len(mm)
-                result = np.power(x, list(mm))
+                result = np.array([IMPLEMENTED_POLYNOMIAL_BASIS[basis](x, n) for n in mm])
                 result = np.product(result, axis=1)
                 results[:, i] = result
             return results

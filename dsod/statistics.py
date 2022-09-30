@@ -99,8 +99,9 @@ class SlidingMKDE(BaseDetector):
 
 
 class SimpleChristoffel(BaseDetector):
-    def __init__(self, d: int = 2, r: float = 0.5, forget_factor: Union[float, type(None)] = None, reg="1"):
+    def __init__(self, d: int = 2, r: float = 0.5, forget_factor: Union[float, type(None)] = None, reg="0"):
         assert 0 < r <= 1
+        self.p = None
         self.d = d
         self.r = r
         self.moments_matrix = MomentsMatrix(d, forget_factor=forget_factor)
@@ -110,8 +111,11 @@ class SimpleChristoffel(BaseDetector):
         if len(x.shape) != 2:
             raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
         self.__dict__["fit_shape"] = x.shape
+        self.p = self.__dict__["fit_shape"][1]
         self.moments_matrix.fit(x)
-        if self.reg == "1":  # \alpha is the most basic regularizer
+        if self.reg == "0":  # \alpha is the most basic regularizer
+            self.__dict__["regularizer"] = 1
+        elif self.reg == "1":  # \alpha is the most basic regularizer
             self.__dict__["regularizer"] =comb(self.d + x.shape[1], self.d)
         elif self.reg == "2":  # r * d * \alpha was the regulizer we used initially
             self.__dict__["regularizer"] = self.r * self.d * comb(self.d + x.shape[1], self.d)
@@ -194,6 +198,7 @@ class DyCG(BaseDetector):
         self.degrees = degrees
         self.models = [SimpleChristoffel(d=d, r=r, forget_factor=forget_factor, reg=reg) for d in degrees]
         self.decision = decision
+        self.p = None
 
     def fit(self, x):
         if len(x.shape) != 2:
