@@ -26,7 +26,7 @@ class LevelsetPlotter(BasePlotter):
         assert model.__dict__["p"] == 2
         self.model = model
 
-    def plot(self, x, n_x1=100, n_x2=100, show=False, save=False, save_title="fig.png", close=True):
+    def plot(self, x, *args, n_x1=100, n_x2=100, show=False, save=False, save_title="fig.png", close=True, **kwargs):
         assert x.shape[1] == self.model.__dict__["p"]
         fig, ax = plt.subplots()
         ax.scatter(x[:, 0], x[:, 1], marker='x', s=20)
@@ -39,10 +39,11 @@ class LevelsetPlotter(BasePlotter):
         x1, x2 = np.meshgrid(X1, X2)
         x3 = np.c_[x1.ravel(), x2.ravel()]
         X3 = self.model.score_samples(x3).reshape(x1.shape)
-        # levels = np.exp(np.linspace(np.log(np.min(X3)), np.log(np.max(X3)), 11))
-        percentiles = [25, 50, 75, 90, 95, 98, 99, 99.9]
+        percentiles = [25, 50, 75]
+        if kwargs.get("percentiles") is not None:
+            percentiles = kwargs["percentiles"]
         levels = [np.percentile(X3, p) for p in percentiles]
-        cs = ax.contour(X1, X2, X3, levels=list(levels[1:-1]))
+        cs = ax.contour(X1, X2, X3, levels=levels)
         ax.clabel(cs, inline=1)
         if save:
             plt.savefig(save_title)
@@ -53,6 +54,31 @@ class LevelsetPlotter(BasePlotter):
         else:
             return fig, ax
 
+    def plot_in_ax(self, x, ax, n_x1=100, n_x2=100, **kwargs):
+        assert x.shape[1] == self.model.__dict__["p"]
+        ax.scatter(x[:, 0], x[:, 1], marker='x', s=20)
+        x1_margin = (np.max(x[:, 0]) - np.min(x[:, 0])) / 10
+        x2_margin = (np.max(x[:, 1]) - np.min(x[:, 1])) / 10
+        ax.set_xlim([np.min(x[:, 0]) - x1_margin, np.max(x[:, 0]) + x1_margin])
+        ax.set_ylim([np.min(x[:, 1]) - x2_margin, np.max(x[:, 1]) + x2_margin])
+        X1 = np.linspace(np.min(x[:, 0] - x1_margin), np.max(x[:, 0] + x1_margin), n_x1)
+        X2 = np.linspace(np.min(x[:, 1]) - x2_margin, np.max(x[:, 1] + x2_margin), n_x2)
+        x1, x2 = np.meshgrid(X1, X2)
+        x3 = np.c_[x1.ravel(), x2.ravel()]
+        X3 = self.model.score_samples(x3).reshape(x1.shape)
+        percentiles = [25, 50, 75]
+        if kwargs.get("percentiles") is not None:
+            percentiles = kwargs["percentiles"]
+        levels = [np.percentile(X3, p) for p in percentiles]
+        cs = ax.contour(X1, X2, X3, levels=levels, colors="purple")
+
+        fmt = {}
+        strs = [f"{p}%" for p in percentiles]
+        for l, s in zip(cs.levels, strs):
+            fmt[l] = s
+        plt.clabel(cs, cs.levels[::2], inline=True, fmt=fmt, fontsize=10)
+
+        ax.clabel(cs, inline=1)
 
 # TODO: Change MTreePlotter to take MTree in spite of OSMCOD
 class MTreePlotter(BasePlotter):
