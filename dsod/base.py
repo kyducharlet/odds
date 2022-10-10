@@ -40,6 +40,10 @@ class BaseDetector(ABC):
         pass
 
     @abstractmethod
+    def predict_update(self, x):
+        pass
+
+    @abstractmethod
     def copy(self):
         pass
 

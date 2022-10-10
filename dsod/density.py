@@ -1,14 +1,14 @@
-import numpy as np
 from typing import Union
 
 import time
 
 from .base import BaseDetector, NotFittedError
-from .utils import search_kNN, compute_k_distance, compute_rd, compute_lrd, compute_lof, update_when_adding, update_when_removing
+from .utils import search_kNN, compute_k_distance, compute_rd, compute_lrd, compute_lof, update_when_adding, update_when_removing, np, linalg, optimize
 from .utils import RStarTree
+from .utils import DILOFPoint, sigmoid
 
 
-class ILOF(BaseDetector):
+class NaiveILOF(BaseDetector):
     def __init__(self, k: int, threshold=1.1, win_size: Union[type(None), int] = None):
         self.threshold = threshold
         self.k = k
@@ -119,7 +119,7 @@ class ILOF(BaseDetector):
             update_when_removing(self.points, index, self.kNNs, self.k_distances, self.rds, self.lrds, self.lofs, self.k)
 
     def copy(self):
-        model_bis = ILOF(self.k, self.win_size)
+        model_bis = NaiveILOF(self.k, self.win_size)
         model_bis.points = self.points
         model_bis.k_distances = self.k_distances
         model_bis.kNNs = self.kNNs
@@ -130,7 +130,7 @@ class ILOF(BaseDetector):
         return model_bis
 
 
-class ILOFv2(BaseDetector):
+class ILOF(BaseDetector):
     def __init__(self, k: int, threshold=1.1, win_size: Union[type(None), int] = None, min_size=3, max_size=12, p_reinsert_tol=4, reinsert_strategy="close", n_trim_iterations=3):
         self.threshold = threshold
         self.k = k
@@ -174,7 +174,7 @@ class ILOFv2(BaseDetector):
         lof_scores = []
         for xx in x:
             kNNs = self.rst.search_kNN(xx.reshape(1, -1))
-            rds = [max(np.linalg.norm(xx.reshape(1, -1) - o.low), o.__dict__["__k_dist__"]) for o in kNNs]
+            rds = [max(linalg.norm(xx.reshape(1, -1) - o.low), o.__dict__["__k_dist__"]) for o in kNNs]
             lrd = 1 / np.mean(rds)
             lof_scores.append(np.mean([o.__dict__["__lrd__"] for o in kNNs]) / lrd)
         return np.array(lof_scores)
@@ -330,3 +330,149 @@ class ILOFv2(BaseDetector):
 
     def copy(self):
         pass
+
+
+class DILOF(BaseDetector):
+    def __init__(self, k, threshold, win_size: int, step_size=0.3, reg_const=0.001, max_iter=100, use_Ckn=True):
+        self.k = k
+        self.threshold = threshold
+        self.win_size = win_size
+        self.step_size = step_size
+        self.reg_const = reg_const
+        self.max_iter = max_iter
+        self.use_Ckn = use_Ckn
+        self.points = None
+        self.p = None
+
+    def fit(self, x: np.ndarray):
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        self.p = x.shape[1]
+        self.points = []
+        self.__fit_lof__(x[:self.win_size])
+        for xx in x[self.win_size:]:
+            point = DILOFPoint(xx)
+            self.__dilof__(point)
+
+    def update(self, x):
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        for xx in x:
+            point = DILOFPoint(xx)
+            self.__dilof__(point)
+
+    def score_samples(self, x):
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        scores = np.zeros(len(x))
+        for i, xx in enumerate(x):
+            point = DILOFPoint(xx)
+            point.compute_without_updates(self.points, self.k)
+            scores[i] = point.lof
+        return scores
+
+    def decision_function(self, x):
+        return self.threshold - self.score_samples(x)
+
+    def predict(self, x):
+        return np.where(self.decision_function(x) < 0, -1, 1)
+
+    def eval_update(self, x):
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        evals = np.zeros(len(x))
+        for i, xx in enumerate(x):
+            point = DILOFPoint(xx)
+            self.__dilof__(point)
+            evals[i] = self.threshold - point.lof
+        return evals
+
+    def predict_update(self, x):
+        if len(x.shape) != 2:
+            raise ValueError("The expected array shape: (N, p) do not match the given array shape: {}".format(x.shape))
+        preds = np.zeros(len(x))
+        for i, xx in enumerate(x):
+            point = DILOFPoint(xx)
+            self.__dilof__(point)
+            preds[i] = -1 if point.lof > self.threshold else 1
+        return preds
+
+    def __fit_lof__(self, data):
+        for xx in data:
+            self.points.append(DILOFPoint(xx))
+        for p in self.points:
+            p.compute_kNNs_kdist(self.points, self.k)
+        for p in self.points:
+            p.compute_rds_lrd()
+        for p in self.points:
+            p.compute_lof()
+
+    def __dilof__(self, point):
+        self.__lod__(point)
+        self.points.append(point)
+        if len(self.points) >= self.win_size:
+            self.points = self.__nds__() + self.points[self.win_size//2:]
+
+    def __nds__(self):
+        if self.use_Ckn:
+            return self.__nds_using_Ckn__()
+        else:
+            return self.__nds_without_Ckn__()
+
+    def __nds_using_Ckn__(self):
+        y = 0.5 * np.ones(self.win_size // 2)
+        ss = self.step_size
+        nus = [p.get_local_kdist(self.points[:self.win_size//2], self.k) for p in self.points[:self.win_size//2]]
+        sum_exp_lof = np.sum([np.exp(sigmoid(p.lof)) for p in self.points[:self.win_size//2]])
+        betas = [np.sum([np.exp(sigmoid(q.lof)) for q in p.kNNs]) / sum_exp_lof for p in self.points[:self.win_size//2]]
+        rhos = [nus[i] + betas[i] * np.max([linalg.norm(p.values - q.values) - nus[i] for q in self.points if q != p]) for (i, p) in enumerate(self.points[:self.win_size//2])]
+        C = self.__estimate_Ckns__(nus)
+        for i in range(self.max_iter):
+            new_y = y.copy()
+            ss = 0.95 * ss
+            for j in range(len(y)):
+                p = self.points[j]
+                if y[j] > 1:
+                    psi = 2 * (y[j] - 1)
+                elif y[j] < 0:
+                    psi = 2 * y[j]
+                else:
+                    psi = 0
+                new_y[j] = y[j] - ss * (np.sum([linalg.norm(p.values - self.points[:self.win_size//2][n].values) / nus[n] for n in C[j]]) + (rhos[j] / nus[j]) - p.lof + psi + self.reg_const * (np.sum(y) - (self.win_size / 4)))
+            y = new_y
+        selected_points = np.argsort(y)[-self.win_size//4:]
+        return list(np.array(self.points)[selected_points])
+
+    def __nds_without_Ckn__(self):
+        lofs = np.array([p.lof for p in self.points[:self.win_size//2]])
+        nus = np.array([p.get_local_kdist(self.points[:self.win_size//2], self.k) for p in self.points[:self.win_size//2]])
+        sum_exp_lof = np.sum([np.exp(sigmoid(p.lof)) for p in self.points[:self.win_size//2]])
+        betas = [np.sum([np.exp(sigmoid(q.lof)) for q in p.kNNs]) / sum_exp_lof for p in self.points[:self.win_size//2]]
+        rhos = np.array([nus[i] + betas[i] * np.max([linalg.norm(p.values - q.values) - nus[i] for q in self.points if q != p]) for (i, p) in enumerate(self.points[:self.win_size//2])])
+        def objective_func(y, rhos, nus, lofs, W):
+            psi = np.zeros(len(y))
+            psi[np.where(y > 1)] = np.square(y[np.where(y > 1)] - 1)
+            psi[np.where(y < 0)] = np.square(y[np.where(y < 0)])
+            return np.dot(y, (rhos / nus) - lofs) + np.sum(psi) + (1 / 2) * np.square(np.sum(y) - (W / 4))
+        res = optimize.minimize(objective_func, x0=0.5*np.ones(self.win_size//2), args=(rhos, nus, lofs, self.win_size))
+        selected_points = np.argsort(res.x)[-self.win_size//4:]
+        return list(np.array(self.points)[selected_points])
+
+    def __estimate_Ckns__(self, nus):
+        s = [np.sum([np.exp(sigmoid(q.lof)) for q in p.kNNs]) for p in self.points[:self.win_size//2]]
+        s_ = np.mean(s)
+        C = [[] for p in self.points[:self.win_size//2]]
+        for i in range(self.win_size // 2):
+            p = self.points[i]
+            if s[i] > s_:
+                for j in range(self.win_size // 2):
+                    if nus[i] < linalg.norm(p.values - self.points[j].values) < 2 * np.exp(sigmoid(p.lof)) * nus[i]:
+                        C[j].append(i)
+                        break
+        return C
+
+    def __lod__(self, point):
+        point.compute_with_updates(self.points, self.k)
+
+    def copy(self):
+        raise NotImplementedError("Copy has not been implemented yet for DILOF.")

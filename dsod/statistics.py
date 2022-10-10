@@ -152,10 +152,7 @@ class SimpleChristoffel(BaseDetector):
         return 1 - self.score_samples(x)
 
     def predict(self, x):
-        if self.__dict__.get("regularize") is None:
-            raise NotFittedError("This Christoffel instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.")
-        scores = self.score_samples(x.reshape(-1, self.__dict__["fit_shape"][1]))
-        return np.where(scores > 1, -1, 1)
+        return np.where(self.decision_function(x) < 0, -1, 1)
 
     def fit_predict(self, x):
         self.fit(x.reshape(-1, self.__dict__["fit_shape"][1]))

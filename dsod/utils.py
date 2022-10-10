@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import linalg
+from scipy import optimize
 from hilbertcurve import hilbertcurve
 import itertools
 import heapq
@@ -33,7 +34,7 @@ IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
 }
 
 
-""" Methods for LOF computation """
+""" Methods for LOF computation in NaiveILOF """
 
 
 def search_kNN(points, index, k):
@@ -734,6 +735,69 @@ class RStarTreeLevel:
 
     def decrement(self):
         self.level -= 1
+
+
+""" Methods for LOF computation in DILOF (kNN and RkNN searches are done naively since maintaining an R*-tree would be difficult (lot of removal) """
+
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(x))
+
+
+class DILOFPoint:
+    def __init__(self, values):
+        self.values = values
+        self.kNNs = []
+        self.kdist = None
+        self.rds = []
+        self.lrd = None
+        self.lof = None
+
+    def compute_with_updates(self, points, k):
+        dists = [np.linalg.norm(self.values - p.values) for p in points]
+        self.kdist = dists[np.argsort(dists)[k-1]]
+        self.kNNs = list(np.array(points)[np.where(dists <= self.kdist)])
+        RkNNs = [(i, p) for (i,p) in enumerate(points) if dists[i] <= p.kdist]
+        lrd_updates = {p for (i, p) in RkNNs}  # We use a Python set here to avoid repetitions
+        for (i, p) in RkNNs:
+            lrd_updates = lrd_updates.union(p.update_dists(self, points, k))
+        self.compute_rds_lrd()
+        for p in lrd_updates:
+            p.update_lrd()
+        self.compute_lof()
+
+    def compute_without_updates(self, points, k):
+        self.compute_kNNs_kdist(points, k)
+        self.compute_rds_lrd()
+        self.compute_lof()
+
+    def compute_kNNs_kdist(self, points, k):
+        dists = [np.linalg.norm(self.values - p.values) for p in points if p != self]
+        self.kdist = dists[np.argsort(dists)[k - 1]]
+        self.kNNs = list(np.array(points)[np.where(dists <= self.kdist)])
+
+    def compute_rds_lrd(self):
+        self.rds = [max(q.kdist, np.linalg.norm(self.values - q.values)) for q in self.kNNs]
+        self.lrd = 1 / np.mean(self.rds)
+
+    def compute_lof(self):
+        self.lof = np.mean([p.lrd for p in self.kNNs]) / self.lrd
+
+    def update_dists(self, new_kNN, points, k):
+        self.compute_kNNs_kdist(points + [new_kNN], k)  # Recompute entirely kNNs and kdist since it can have change with the removal of points
+        self.rds = [max(q.kdist, np.linalg.norm(self.values - q.values)) for q in self.kNNs]
+        lrd_updates = set()
+        for q in self.kNNs:
+            if self in q.kNNs:
+                lrd_updates.add(q)
+        return lrd_updates
+
+    def update_lrd(self):
+        self.lrd = 1 / np.mean(self.rds)
+
+    def get_local_kdist(self, points, k):
+        dists = [np.linalg.norm(self.values - p.values) for p in points if p != self]
+        return dists[np.argsort(dists)[k - 1]]
 
 
 """ M-tree used by MCOD for range queries """
