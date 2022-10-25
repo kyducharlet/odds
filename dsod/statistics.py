@@ -98,7 +98,7 @@ class SlidingMKDE(BaseDetector):
         return model_bis
 
 
-class SimpleChristoffel(BaseDetector):
+class DyCF(BaseDetector):
     def __init__(self, d: int = 2, r: float = 0.5, forget_factor: Union[float, type(None)] = None, reg="0"):
         assert 0 < r <= 1
         self.p = None
@@ -179,7 +179,7 @@ class SimpleChristoffel(BaseDetector):
         return preds
 
     def copy(self):
-        c_bis = SimpleChristoffel(d=self.d, r=self.r)
+        c_bis = DyCF(d=self.d, r=self.r)
         c_bis.moments_matrix = self.moments_matrix.copy()
         if self.__dict__.get("fit_shape") is not None:
             c_bis.__dict__["fit_shape"] = self.__dict__["fit_shape"]
@@ -193,7 +193,7 @@ class DyCG(BaseDetector):
                  decision="mean_growth", reg="6"):
         assert len(degrees) > 1
         self.degrees = degrees
-        self.models = [SimpleChristoffel(d=d, r=r, forget_factor=forget_factor, reg=reg) for d in degrees]
+        self.models = [DyCF(d=d, r=r, forget_factor=forget_factor, reg=reg) for d in degrees]
         self.decision = decision
         self.p = None
 
