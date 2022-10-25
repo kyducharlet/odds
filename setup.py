@@ -4,7 +4,7 @@ setup(
     name='datastream-outlier-detection',
     version='0.1',
     packages=['dsod'],
-    url='https://gitlab.forge.berger-levrault.com/bl-drit/datastream-outlier-detection',
+    url='https://gitlab.forge.berger-levrault.com/bl-drit/odds',
     license='',
     author='KDUC',
     author_email='kevin.ducharlet@carl.eu',

@@ -9,7 +9,9 @@ from .utils import DILOFPoint, sigmoid
 
 
 class ILOF(BaseDetector):
-    def __init__(self, k: int, threshold=1.1, win_size: Union[type(None), int] = None, min_size=3, max_size=12, p_reinsert_tol=4, reinsert_strategy="close", n_trim_iterations=3):
+    def __init__(self, k: int, threshold=1.1, win_size: Union[type(None), int] = None,
+                 # R*Tree parameters:
+                 min_size=3, max_size=12, p_reinsert_tol=4, reinsert_strategy="close", n_trim_iterations=3):
         self.threshold = threshold
         self.k = k
         self.win_size = win_size
@@ -211,7 +213,7 @@ class ILOF(BaseDetector):
 
 
 class DILOF(BaseDetector):
-    def __init__(self, k, threshold, win_size: int, step_size=0.3, reg_const=0.001, max_iter=100, use_Ckn=True):
+    def __init__(self, k, threshold, win_size: int, step_size=0.3, reg_const=1, max_iter=100, use_Ckn=True):
         self.k = k
         self.threshold = threshold
         self.win_size = win_size
