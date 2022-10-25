@@ -1,4 +1,4 @@
-from sklearn.metrics import f1_score, roc_auc_score, balanced_accuracy_score
+from sklearn.metrics import f1_score, roc_auc_score, balanced_accuracy_score, precision_score
 from sklearn.exceptions import UndefinedMetricWarning
 import numpy as np
 import pandas as pd
@@ -9,204 +9,51 @@ from tqdm import tqdm
 
 from dsod.distance import OSCOD, OSMCOD
 from dsod.density import ILOF
-from dsod.statistics import SlidingMKDE, SimpleChristoffel, DyCG
+from dsod.statistics import SlidingMKDE, DyCF, DyCG
 
 
 METHODS = [
     {
-        "name": "SimpleChristoffel (d=2)",
-        "method": SimpleChristoffel,
+        "name": "ILOF k=10 W=1000 tau=1.1",
+        "method": ILOF,
         "params": {
-            "d": 2,
+            "k": 10,
+            "threshold": 1.1,
+            "win_size": 1000,
         }
     }, {
-        "name": "SimpleChristoffel (d=4)",
-        "method": SimpleChristoffel,
+        "name": "ILOF k=20 W=1000 tau=1.1",
+        "method": ILOF,
         "params": {
-            "d": 4,
+            "k": 20,
+            "threshold": 1.1,
+            "win_size": 1000,
         }
     }, {
-        "name": "SimpleChristoffel (d=6)",
-        "method": SimpleChristoffel,
+        "name": "ILOF k=10 W=1000 tau=1.05",
+        "method": ILOF,
         "params": {
-            "d": 6,
+            "k": 10,
+            "threshold": 1.05,
+            "win_size": 1000,
         }
     }, {
-        "name": "SimpleChristoffel (d=8)",
-        "method": SimpleChristoffel,
+        "name": "ILOF k=20 W=1000 tau=1.05",
+        "method": ILOF,
         "params": {
-            "d": 8,
+            "k": 20,
+            "threshold": 1.05,
+            "win_size": 1000,
         }
-    }, {
-        "name": "DyCG 1 - 1",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth",
-            "reg": "1",
-        }
-    }, {
-        "name": "DyCG 1 - 2",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth",
-            "reg": "2",
-        }
-    }, {
-        "name": "DyCG 1 - 3",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth",
-            "reg": "3",
-        }
-    }, {
-        "name": "DyCG 1 - 4",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth",
-            "reg": "4",
-        }
-    }, {
-        "name": "DyCG 1 - 5",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth",
-            "reg": "5",
-        }
-    }, {
-        "name": "DyCG 1 - 6",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth",
-            "reg": "6",
-        }
-    }, {
-        "name": "DyCG 2 - 1",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth_rate",
-            "reg": "1",
-        }
-    }, {
-        "name": "DyCG 2 - 2",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth_rate",
-            "reg": "2",
-        }
-    }, {
-        "name": "DyCG 2 - 3",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth_rate",
-            "reg": "3",
-        }
-    }, {
-        "name": "DyCG 2 - 4",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth_rate",
-            "reg": "4",
-        }
-    }, {
-        "name": "DyCG 2 - 5",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth_rate",
-            "reg": "5",
-        }
-    }, {
-        "name": "DyCG 2 - 6",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_growth_rate",
-            "reg": "6",
-        }
-    }, {
-        "name": "DyCG 3 - 1",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_score",
-            "reg": "1",
-        }
-    }, {
-        "name": "DyCG 3 - 2",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_score",
-            "reg": "2",
-        }
-    }, {
-        "name": "DyCG 3 - 3",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_score",
-            "reg": "3",
-        }
-    }, {
-        "name": "DyCG 3 - 4",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_score",
-            "reg": "4",
-        }
-    }, {
-        "name": "DyCG 3 - 5",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_score",
-            "reg": "5",
-        }
-    }, {
-        "name": "DyCG 3 - 6",
-        "method": DyCG,
-        "params": {
-            "decision": "mean_score",
-            "reg": "6",
-        }
-    }, {
-        "name": "DyCG 4 - 1",
-        "method": DyCG,
-        "params": {
-            "decision": "sign_poly_2_reg",
-            "reg": "1",
-        }
-    }, {
-        "name": "DyCG 4 - 2",
-        "method": DyCG,
-        "params": {
-            "decision": "sign_poly_2_reg",
-            "reg": "2",
-        }
-    }, {
-        "name": "DyCG 4 - 3",
-        "method": DyCG,
-        "params": {
-            "decision": "sign_poly_2_reg",
-            "reg": "3",
-        }
-    }, {
-        "name": "DyCG 4 - 4",
-        "method": DyCG,
-        "params": {
-            "decision": "sign_poly_2_reg",
-            "reg": "4",
-        }
-    }, {
-        "name": "DyCG 4 - 5",
-        "method": DyCG,
-        "params": {
-            "decision": "sign_poly_2_reg",
-            "reg": "5",
-        }
-    }, {
-        "name": "DyCG 4 - 6",
-        "method": DyCG,
-        "params": {
-            "decision": "sign_poly_2_reg",
-            "reg": "6",
-        }
-    }
+    },
 ]
+
+
+def average_precision_score(y_true, y_score, pos_label):
+    y_score_ = y_score[y_true == pos_label]
+    y_preds = [np.where(y_score - threshold < 0, -1, 1) for threshold in y_score_]
+    precision_scores = [precision_score(y_true, y_pred, pos_label=pos_label, zero_division=0) for y_pred in y_preds]
+    return np.mean(precision_scores)
 
 
 def load_dataset(filename):
@@ -223,7 +70,7 @@ def split_data(data, split_pos):
     return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
 
 
-def compute(methods, x_train, x_test, y_test, savename, close=False):
+def compute(methods, x_train, x_test, y_test, savename, show=True, close=False):
     y_decisions = dict()
     y_preds = dict()
     for method in methods:
@@ -250,7 +97,8 @@ def compute(methods, x_train, x_test, y_test, savename, close=False):
                 y_preds[method["name"]] = y_pred
                 with open(filename, "wb") as f:
                     pickle.dump(results, f)
-    cols = ["f1_out", "f1_in", "f1_mean", "roc_auc", "balanced_acc"]
+    cols = ["AUROC", "AP"]
+    # cols = ["f1_out", "f1_in", "f1_mean", "roc_auc", "balanced_acc"]
     rows = []
     table = []
     with warnings.catch_warnings():
@@ -264,9 +112,11 @@ def compute(methods, x_train, x_test, y_test, savename, close=False):
                 f1_in = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=1)
                 f1_mean = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], average="macro")
                 roc_auc = roc_auc_score(y_test[~np.isnan(y_deci)], y_deci[~np.isnan(y_deci)])
+                average_p = average_precision_score(y_test[~np.isnan(y_deci)], y_deci[~np.isnan(y_deci)], pos_label=-1)
                 balanced_accuracy = balanced_accuracy_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)])
-                res = [f1_out, f1_in, f1_mean, roc_auc, balanced_accuracy]
-                table.append(['%1.3f' % v for v in res])
+                res = [roc_auc, average_p]
+                # res = [f1_out, f1_in, f1_mean, roc_auc, average_p, balanced_accuracy]
+                table.append(['%1.9f' % v for v in res])
     fig, ax = plt.subplots()
     fig.patch.set_visible(False)
     ax.axis('off')
@@ -276,7 +126,8 @@ def compute(methods, x_train, x_test, y_test, savename, close=False):
     df.to_excel(f"final_metrics_{savename}.xlsx")
     fig.tight_layout()
     plt.savefig("final_metrics_" + savename + ".png")
-    plt.show()
+    if show:
+        plt.show()
     if close:
         plt.close()
 
@@ -287,19 +138,19 @@ if __name__ == "__main__":
     split_pos = 1000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "dycg_optim_2moons", close=True)
+    compute(METHODS, x_train, x_test, y_test, "comparison_2moons", show=False, close=True)
     data = load_dataset("../res/conveyor.csv")
     split_pos = 5000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "dycg_optim_convey", close=True)
+    compute(METHODS, x_train, x_test, y_test, "comparison_convey", show=False, close=True)
     data = load_dataset("../res/http.csv")
     split_pos = 10000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "dycg_optim_http", close=True)
+    compute(METHODS, x_train, x_test, y_test, "comparison_http", show=False, close=True)
     data = load_dataset("../res/four_modes.csv")
     split_pos = 5000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "dycg_optim_4modes", close=True)
+    compute(METHODS, x_train, x_test, y_test, "comparison_4modes", show=False, close=True)

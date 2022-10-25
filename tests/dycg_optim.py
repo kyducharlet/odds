@@ -1,4 +1,4 @@
-from dsod.statistics import SimpleChristoffel, DyCG
+from dsod.statistics import DyCF, DyCG
 import warnings
 from tests.methods_comparison import load_dataset, split_data, compute
 
@@ -6,25 +6,25 @@ from tests.methods_comparison import load_dataset, split_data, compute
 METHODS = [
     {
         "name": "SimpleChristoffel (d=2)",
-        "method": SimpleChristoffel,
+        "method": DyCF,
         "params": {
             "d": 2,
         }
     }, {
         "name": "SimpleChristoffel (d=4)",
-        "method": SimpleChristoffel,
+        "method": DyCF,
         "params": {
             "d": 4,
         }
     }, {
         "name": "SimpleChristoffel (d=6)",
-        "method": SimpleChristoffel,
+        "method": DyCF,
         "params": {
             "d": 6,
         }
     }, {
         "name": "SimpleChristoffel (d=8)",
-        "method": SimpleChristoffel,
+        "method": DyCF,
         "params": {
             "d": 8,
         }

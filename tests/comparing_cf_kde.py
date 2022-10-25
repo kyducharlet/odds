@@ -1,4 +1,4 @@
-from dsod.statistics import SlidingMKDE, SimpleChristoffel
+from dsod.statistics import SlidingMKDE, DyCF
 from dsod.plotter import LevelsetPlotter
 from tests.methods_comparison import load_dataset
 
@@ -12,7 +12,7 @@ if __name__=="__main__":
     """ First dataset: Two Moons """
     data = load_dataset("../res/two_moons.csv")[:,:-1]
     # Christoffel Function
-    cf = SimpleChristoffel(d=6)
+    cf = DyCF(d=6)
     start = time.time()
     cf.fit(data)
     print(f"CF fit: {time.time() - start}s")
@@ -42,7 +42,7 @@ if __name__=="__main__":
     """ Second dataset: Two Circles """
     data = load_dataset("../res/two_circles.csv")[:, :-1]
     # Christoffel Function
-    cf = SimpleChristoffel(d=6)
+    cf = DyCF(d=6)
     start = time.time()
     cf.fit(data)
     print(f"CF fit: {time.time() - start}s")
