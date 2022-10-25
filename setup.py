@@ -9,6 +9,6 @@ setup(
     author='KDUC',
     author_email='kevin.ducharlet@carl.eu',
     description='Framework for unsupervised outlier detection on datastreams.',
-    requires=['numpy==1.22.3', 'matplotlib==3.5.2', 'scipy==1.8.1', 'scikit-learn==1.1.1', 'pandas==1.4.2', 'tqdm==4.64.0'],
+    install_requires=['numpy==1.22.3', 'matplotlib==3.5.2', 'scipy==1.8.1', 'scikit-learn==1.1.1', 'pandas==1.4.2', 'tqdm==4.64.0'],
     python_requires='==3.10',
 )
