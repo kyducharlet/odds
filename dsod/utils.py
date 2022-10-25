@@ -617,7 +617,9 @@ class RStarTreeLevel:
         self.level -= 1
 
 
-""" Methods for LOF computation in DILOF (kNN and RkNN searches are done naively since maintaining an R*-tree would be difficult (lot of removal) """
+""" Methods for LOF computation in DILOF 
+(kNN and RkNN searches are done naively since maintaining an R*-tree would be difficult, 
+with a large number of removals at once and computation of kdist among a reduced dataset) """
 
 
 def sigmoid(x):
@@ -633,7 +635,7 @@ class DILOFPoint:
         self.lrd = None
         self.lof = None
 
-    def compute_with_updates(self, points, k):
+    def compute_with_updates(self, points, k):  # used when the point is added to the model
         dists = [np.linalg.norm(self.values - p.values) for p in points]
         self.kdist = dists[np.argsort(dists)[k-1]]
         self.kNNs = list(np.array(points)[np.where(dists <= self.kdist)])
@@ -646,7 +648,7 @@ class DILOFPoint:
             p.update_lrd()
         self.compute_lof()
 
-    def compute_without_updates(self, points, k):
+    def compute_without_updates(self, points, k):  # used when scoring a point without update of the whole model
         self.compute_kNNs_kdist(points, k)
         self.compute_rds_lrd()
         self.compute_lof()
@@ -663,7 +665,7 @@ class DILOFPoint:
     def compute_lof(self):
         self.lof = np.mean([p.lrd for p in self.kNNs]) / self.lrd
 
-    def update_dists(self, new_kNN, points, k):
+    def update_dists(self, new_kNN, points, k):  # used to update kNNs, kdist and rds and to know what points need their lrd to be updated
         self.compute_kNNs_kdist(points + [new_kNN], k)  # Recompute entirely kNNs and kdist since it can have change with the removal of points
         self.rds = [max(q.kdist, np.linalg.norm(self.values - q.values)) for q in self.kNNs]
         lrd_updates = set()
@@ -672,10 +674,10 @@ class DILOFPoint:
                 lrd_updates.add(q)
         return lrd_updates
 
-    def update_lrd(self):
+    def update_lrd(self):  # update lrd based on already updated rds
         self.lrd = 1 / np.mean(self.rds)
 
-    def get_local_kdist(self, points, k):
+    def get_local_kdist(self, points, k):  # used to compute a point kdist with a restricted dataset (or local dataset)
         dists = [np.linalg.norm(self.values - p.values) for p in points if p != self]
         return dists[np.argsort(dists)[k - 1]]
 
