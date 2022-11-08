@@ -7,6 +7,7 @@ import warnings
 import pickle
 from tqdm import tqdm
 from multiprocessing import Pool
+from pympler import asizeof
 
 from dsod.distance import OSCOD, OSMCOD
 from dsod.density import ILOF
@@ -71,15 +72,12 @@ def split_data(data, split_pos):
     return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
 
 
-def multiprocessable_method(method, savename, x_test, x_train, y_decisions, y_preds, y_test):
+def multiprocessable_method(method, savename, x_test, x_train, y_test):
     if type(method) == dict:
         filename = savename + "__" + method["name"] + ".pickle"
-        model_filename = savename + "__" + method["name"] + "__model" + ".pickle"
         try:
             with open(filename, "rb") as f:
-                results = pickle.load(f)
-            y_decisions[method["name"]] = results["y_decision"]
-            y_preds[method["name"]] = results["y_pred"]
+                pickle.load(f)
         except FileNotFoundError:
             model = method["method"](**method["params"])
             model.fit(x_train)
@@ -88,28 +86,32 @@ def multiprocessable_method(method, savename, x_test, x_train, y_decisions, y_pr
             for i in tqdm(range(len(x_test)), desc=method["name"]):
                 y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
                 y_pred[i] = -1 if y_decision[i] < 0 else 1
-            with open(model_filename, "wb") as f:
-                pickle.dump(model, f)
+            print(f"{method['name']} size : {asizeof.asizeof(model)}")
             results = {
                 "y_decision": y_decision,
                 "y_pred": y_pred,
             }
-            y_decisions[method["name"]] = y_decision
-            y_preds[method["name"]] = y_pred
             with open(filename, "wb") as f:
                 pickle.dump(results, f)
 
 
 def compute(methods, x_train, x_test, y_test, savename, multi_processing=False, show=True, close=False):
-    y_decisions = dict()
-    y_preds = dict()
     if not multi_processing:
         for method in methods:
-            multiprocessable_method(method, savename, x_test, x_train, y_decisions, y_preds, y_test)
+            multiprocessable_method(method, savename, x_test, x_train, y_test)
     else:
-        params = [(method, savename, x_test, x_train, y_decisions, y_preds, y_test) for method in methods]
+        params = [(method, savename, x_test, x_train, y_test) for method in methods]
         pool = Pool()
         pool.starmap(multiprocessable_method, params)
+        pool.close()
+    y_decisions = dict()
+    y_preds = dict()
+    for method in methods:
+        filename = savename + "__" + method["name"] + ".pickle"
+        with open(filename, "rb") as f:
+            results = pickle.load(f)
+        y_decisions[method["name"]] = results["y_decision"]
+        y_preds[method["name"]] = results["y_pred"]
     cols = ["AUROC", "AP"]
     # cols = ["f1_out", "f1_in", "f1_mean", "roc_auc", "balanced_acc"]
     rows = []
