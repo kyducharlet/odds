@@ -1,9 +1,7 @@
 import numpy as np
 from scipy import linalg
 from scipy import optimize
-from hilbertcurve import hilbertcurve
 import itertools
-import heapq
 
 
 """ Kernel functions for KDE """

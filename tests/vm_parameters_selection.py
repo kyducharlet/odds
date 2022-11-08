@@ -7,14 +7,14 @@ from tests.methods_comparison import load_dataset, split_data, compute
 
 PARAMS_ILOF = {
     "k": [5, 10, 15, 20],
-    "threshold": [0.5, 0.8, 0.9, 0.95, 1, 1.05, 1.1, 1.2, 1.5],
+    "threshold": [1],
     "win_size": [100, 200, 500, 1000, 2000, 5000],
 }
 
 
 PARAMS_DILOF = {
     "k": [5, 10, 15, 20],
-    "threshold": [0.5, 0.8, 0.9, 0.95, 1, 1.05, 1.1, 1.2, 1.5],
+    "threshold": [1],
     "win_size": [100, 200, 500, 1000, 2000, 5000],
     "step_size": [0.1, 0.2, 0.3, 0.5, 0.7],
     "reg_const": [1],
