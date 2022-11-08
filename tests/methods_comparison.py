@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import warnings
 import pickle
 from tqdm import tqdm
+from multiprocessing import Pool
 
 from dsod.distance import OSCOD, OSMCOD
 from dsod.density import ILOF
@@ -70,33 +71,45 @@ def split_data(data, split_pos):
     return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
 
 
-def compute(methods, x_train, x_test, y_test, savename, show=True, close=False):
+def multiprocessable_method(method, savename, x_test, x_train, y_decisions, y_preds, y_test):
+    if type(method) == dict:
+        filename = savename + "__" + method["name"] + ".pickle"
+        model_filename = savename + "__" + method["name"] + "__model" + ".pickle"
+        try:
+            with open(filename, "rb") as f:
+                results = pickle.load(f)
+            y_decisions[method["name"]] = results["y_decision"]
+            y_preds[method["name"]] = results["y_pred"]
+        except FileNotFoundError:
+            model = method["method"](**method["params"])
+            model.fit(x_train)
+            y_decision = np.zeros(len(y_test))
+            y_pred = np.zeros(len(y_test))
+            for i in tqdm(range(len(x_test)), desc=method["name"]):
+                y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
+                y_pred[i] = -1 if y_decision[i] < 0 else 1
+            with open(model_filename, "wb") as f:
+                pickle.dump(model, f)
+            results = {
+                "y_decision": y_decision,
+                "y_pred": y_pred,
+            }
+            y_decisions[method["name"]] = y_decision
+            y_preds[method["name"]] = y_pred
+            with open(filename, "wb") as f:
+                pickle.dump(results, f)
+
+
+def compute(methods, x_train, x_test, y_test, savename, multi_processing=False, show=True, close=False):
     y_decisions = dict()
     y_preds = dict()
-    for method in methods:
-        if type(method) == dict:
-            filename = savename + "__" + method["name"] + ".pickle"
-            try:
-                with open(filename, "rb") as f:
-                    results = pickle.load(f)
-                y_decisions[method["name"]] = results["y_decision"]
-                y_preds[method["name"]] = results["y_pred"]
-            except FileNotFoundError:
-                model = method["method"](**method["params"])
-                model.fit(x_train)
-                y_decision = np.zeros(len(y_test))
-                y_pred = np.zeros(len(y_test))
-                for i in tqdm(range(len(x_test)), desc=method["name"]):
-                    y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
-                    y_pred[i] = -1 if y_decision[i] < 0 else 1
-                results = {
-                    "y_decision": y_decision,
-                    "y_pred": y_pred,
-                }
-                y_decisions[method["name"]] = y_decision
-                y_preds[method["name"]] = y_pred
-                with open(filename, "wb") as f:
-                    pickle.dump(results, f)
+    if not multi_processing:
+        for method in methods:
+            multiprocessable_method(method, savename, x_test, x_train, y_decisions, y_preds, y_test)
+    else:
+        params = [(method, savename, x_test, x_train, y_decisions, y_preds, y_test) for method in methods]
+        pool = Pool()
+        pool.starmap(multiprocessable_method, params)
     cols = ["AUROC", "AP"]
     # cols = ["f1_out", "f1_in", "f1_mean", "roc_auc", "balanced_acc"]
     rows = []
@@ -106,30 +119,31 @@ def compute(methods, x_train, x_test, y_test, savename, show=True, close=False):
         for method in methods:
             if type(method) == dict:
                 rows.append(method["name"])
-                y_pred = y_preds[method["name"]]
+                # y_pred = y_preds[method["name"]]
                 y_deci = y_decisions[method["name"]]
-                f1_out = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=-1)
-                f1_in = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=1)
-                f1_mean = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], average="macro")
+                # f1_out = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=-1)
+                # f1_in = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], pos_label=1)
+                # f1_mean = f1_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)], labels=[-1, 1], average="macro")
                 roc_auc = roc_auc_score(y_test[~np.isnan(y_deci)], y_deci[~np.isnan(y_deci)])
                 average_p = average_precision_score(y_test[~np.isnan(y_deci)], y_deci[~np.isnan(y_deci)], pos_label=-1)
-                balanced_accuracy = balanced_accuracy_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)])
+                # balanced_accuracy = balanced_accuracy_score(y_test[~np.isnan(y_deci)], y_pred[~np.isnan(y_deci)])
                 res = [roc_auc, average_p]
                 # res = [f1_out, f1_in, f1_mean, roc_auc, average_p, balanced_accuracy]
                 table.append(['%1.9f' % v for v in res])
-    fig, ax = plt.subplots()
+    """fig, ax = plt.subplots()
     fig.patch.set_visible(False)
     ax.axis('off')
     ax.axis('tight')
-    ax.table(cellText=table, rowLabels=rows, colLabels=cols, loc="center")
+    ax.table(cellText=table, rowLabels=rows, colLabels=cols, loc="center")"""
     df = pd.DataFrame(data=table, columns=cols, index=rows)
-    df.to_excel(f"final_metrics_{savename}.xlsx")
-    fig.tight_layout()
+    df.to_csv(f"final_metrics_{savename}.csv")
+    # df.to_excel(f"final_metrics_{savename}.xlsx")
+    """fig.tight_layout()
     plt.savefig("final_metrics_" + savename + ".png")
     if show:
         plt.show()
     if close:
-        plt.close()
+        plt.close()"""
 
 
 if __name__ == "__main__":
