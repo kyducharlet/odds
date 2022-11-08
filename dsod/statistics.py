@@ -113,7 +113,7 @@ class DyCF(BaseDetector):
         self.__dict__["fit_shape"] = x.shape
         self.p = self.__dict__["fit_shape"][1]
         self.moments_matrix.fit(x)
-        if self.reg == "0":  # \alpha is the most basic regularizer
+        if self.reg == "0":  # no regularization
             self.__dict__["regularizer"] = 1
         elif self.reg == "1":  # \alpha is the most basic regularizer
             self.__dict__["regularizer"] =comb(self.d + x.shape[1], self.d)
