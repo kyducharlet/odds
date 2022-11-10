@@ -1,0 +1,121 @@
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/ubuntu/odds/tests/methods_comparison.py", line 80, in multiprocessable_method
+    with open(filename, "rb") as f:
+FileNotFoundError: [Errno 2] No such file or directory: 'choose_params_ilof_tm__ILOF k=20 threshold=1 win_size=100.pickle'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 51, in starmapstar
+    return list(itertools.starmap(args[0], args[1]))
+  File "/home/ubuntu/odds/tests/methods_comparison.py", line 92, in multiprocessable_method
+    y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
+  File "/home/ubuntu/odds/dsod/density.py", line 71, in eval_update
+    obj, = self.update(x[i].reshape(1, -1))
+  File "/home/ubuntu/odds/dsod/density.py", line 49, in update
+    self.__update_metrics_addition__(obj)
+  File "/home/ubuntu/odds/dsod/density.py", line 141, in __update_metrics_addition__
+    old_kNN.__dict__["__RkNNs__"].remove(o)
+ValueError: list.remove(x): x not in list
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/odds/tests/vm_parameters_selection.py", line 82, in <module>
+    compute_vm(METHODS_ILOF, data_dict, "choose_params_ilof", multi_processing=True)
+  File "/home/ubuntu/odds/tests/methods_comparison.py", line 120, in compute_vm
+    pool.starmap(multiprocessable_method, params)
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 375, in starmap
+    return self._map_async(func, iterable, starmapstar, chunksize).get()
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 774, in get
+    raise self._value
+ValueError: list.remove(x): x not in list
+Error in sys.excepthook:
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/apport_python_hook.py", line 72, in apport_excepthook
+    from apport.fileutils import likely_packaged, get_recent_crashes
+  File "/usr/lib/python3/dist-packages/apport/__init__.py", line 5, in <module>
+    from apport.report import Report
+  File "/usr/lib/python3/dist-packages/apport/report.py", line 13, in <module>
+    import fnmatch, glob, traceback, errno, sys, atexit, locale, imp, stat
+  File "/usr/lib/python3.10/imp.py", line 31, in <module>
+    warnings.warn("the imp module is deprecated in favour of importlib and slated "
+DeprecationWarning: the imp module is deprecated in favour of importlib and slated for removal in Python 3.12; see the module's documentation for alternative uses
+
+Original exception was:
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/ubuntu/odds/tests/methods_comparison.py", line 80, in multiprocessable_method
+    with open(filename, "rb") as f:
+FileNotFoundError: [Errno 2] No such file or directory: 'choose_params_ilof_tm__ILOF k=20 threshold=1 win_size=100.pickle'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 51, in starmapstar
+    return list(itertools.starmap(args[0], args[1]))
+  File "/home/ubuntu/odds/tests/methods_comparison.py", line 92, in multiprocessable_method
+    y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
+  File "/home/ubuntu/odds/dsod/density.py", line 71, in eval_update
+    obj, = self.update(x[i].reshape(1, -1))
+  File "/home/ubuntu/odds/dsod/density.py", line 49, in update
+    self.__update_metrics_addition__(obj)
+  File "/home/ubuntu/odds/dsod/density.py", line 141, in __update_metrics_addition__
+    old_kNN.__dict__["__RkNNs__"].remove(o)
+ValueError: list.remove(x): x not in list
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/odds/tests/vm_parameters_selection.py", line 82, in <module>
+    compute_vm(METHODS_ILOF, data_dict, "choose_params_ilof", multi_processing=True)
+  File "/home/ubuntu/odds/tests/methods_comparison.py", line 120, in compute_vm
+    pool.starmap(multiprocessable_method, params)
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 375, in starmap
+    return self._map_async(func, iterable, starmapstar, chunksize).get()
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 774, in get
+    raise self._value
+ValueError: list.remove(x): x not in list
+Method ILOF k=5 threshold=1 win_size=100 over.
+Method ILOF k=5 threshold=1 win_size=200 over.
+Method ILOF k=10 threshold=1 win_size=100 over.
+Method ILOF k=10 threshold=1 win_size=200 over.
+Method ILOF k=5 threshold=1 win_size=2000 over.
+Method ILOF k=5 threshold=1 win_size=5000 over.
+Method ILOF k=10 threshold=1 win_size=500 over.
+Method ILOF k=10 threshold=1 win_size=1000 over.
+Method ILOF k=5 threshold=1 win_size=500 over.
+Method ILOF k=5 threshold=1 win_size=1000 over.
+Method ILOF k=15 threshold=1 win_size=100 over.
+Method ILOF k=15 threshold=1 win_size=200 over.
+Method ILOF k=10 threshold=1 win_size=2000 over.
+Method ILOF k=10 threshold=1 win_size=5000 over.
+Method ILOF k=15 threshold=1 win_size=2000 over.
+Method ILOF k=15 threshold=1 win_size=5000 over.
+Method ILOF k=15 threshold=1 win_size=500 over.
+Method ILOF k=15 threshold=1 win_size=1000 over.
+Method ILOF k=20 threshold=1 win_size=2000 over.
+Method ILOF k=20 threshold=1 win_size=5000 over.
+Method ILOF k=25 threshold=1 win_size=2000 over.
+Method ILOF k=25 threshold=1 win_size=5000 over.
+Method ILOF k=20 threshold=1 win_size=500 over.
+Method ILOF k=20 threshold=1 win_size=1000 over.
+Method ILOF k=30 threshold=1 win_size=2000 over.
+Method ILOF k=30 threshold=1 win_size=5000 over.
+Method ILOF k=25 threshold=1 win_size=500 over.
+Method ILOF k=25 threshold=1 win_size=1000 over.
+Method ILOF k=30 threshold=1 win_size=500 over.
+Method ILOF k=30 threshold=1 win_size=1000 over.
+Exception ignored in: <function Pool.__del__ at 0x7f11dade3760>
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 268, in __del__
+ResourceWarning: unclosed running multiprocessing pool <multiprocessing.pool.Pool state=RUN pool_size=16>
