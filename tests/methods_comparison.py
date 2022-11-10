@@ -8,6 +8,7 @@ import pickle
 from tqdm import tqdm
 from multiprocessing import Pool
 from pympler import asizeof
+import time
 
 from dsod.distance import OSCOD, OSMCOD
 from dsod.density import ILOF
@@ -72,35 +73,58 @@ def split_data(data, split_pos):
     return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
 
 
-def multiprocessable_method(method, savename, x_test, x_train, y_test):
+def multiprocessable_method(method, savename, x_train, x_test, y_test):
     if type(method) == dict:
         filename = savename + "__" + method["name"] + ".pickle"
         try:
             with open(filename, "rb") as f:
                 pickle.load(f)
         except FileNotFoundError:
+            start = time.time()
             model = method["method"](**method["params"])
             model.fit(x_train)
+            fit_time = time.time() - start
             y_decision = np.zeros(len(y_test))
             y_pred = np.zeros(len(y_test))
+            start = time.time()
             for i in tqdm(range(len(x_test)), desc=method["name"]):
                 y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
                 y_pred[i] = -1 if y_decision[i] < 0 else 1
-            print(f"{method['name']} size : {asizeof.asizeof(model)}")
+            eval_time = time.time() - start
+            """print(f"{method['name']} size : {asizeof.asizeof(model)}")
+            print(f"{method['name']} fit time : {fit_time}")
+            print(f"{method['name']} eval time : {eval_time}")"""
             results = {
                 "y_decision": y_decision,
                 "y_pred": y_pred,
+                "model_size": asizeof.asizeof(model),
+                "model_fit_time": fit_time,
+                "model_eval_time": eval_time,
             }
             with open(filename, "wb") as f:
                 pickle.dump(results, f)
 
 
+def compute_vm(methods, data, savename, multi_processing):
+    if not multi_processing:
+        for method in methods:
+            for k, v in data.items():
+                multiprocessable_method(method, savename + '_' + k, **v)
+    else:
+        params = []
+        for k, v in data.items():
+            params.extend([(method, savename + '_' + k, v["x_train"], v["x_test"], v["y_test"]) for method in methods])
+        pool = Pool()
+        pool.starmap(multiprocessable_method, params)
+        pool.close()
+
+
 def compute(methods, x_train, x_test, y_test, savename, multi_processing=False, show=True, close=False):
     if not multi_processing:
         for method in methods:
-            multiprocessable_method(method, savename, x_test, x_train, y_test)
+            multiprocessable_method(method, savename, x_train, x_test, y_test)
     else:
-        params = [(method, savename, x_test, x_train, y_test) for method in methods]
+        params = [(method, savename, x_train, x_test, y_test) for method in methods]
         pool = Pool()
         pool.starmap(multiprocessable_method, params)
         pool.close()
