@@ -6,14 +6,14 @@ from tests.methods_comparison import load_dataset, split_data, compute
 
 
 PARAMS_ILOF = {
-    "k": [5, 10, 15, 20],
+    "k": [5, 10, 15, 20, 25, 30],
     "threshold": [1],
     "win_size": [100, 200, 500, 1000, 2000, 5000],
 }
 
 
 PARAMS_DILOF = {
-    "k": [5, 10, 15, 20],
+    "k": [5, 10, 15, 20, 25, 30],
     "threshold": [1],
     "win_size": [100, 200, 500, 1000, 2000, 5000],
     "step_size": [0.1, 0.2, 0.3, 0.5, 0.7],
