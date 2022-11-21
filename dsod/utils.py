@@ -68,12 +68,12 @@ class RStarTree:
         else:
             obj_ = obj
             obj.parent.children.remove(obj)
-            obj.parent.__adjust_mbr__()
+            # obj.parent.__adjust_mbr__()
         res = self.k * [(np.infty, None)]
         res = self.__search_kNN__(self.root, obj_, res)
         if type(obj) != np.ndarray:
             obj.parent.children.append(obj)
-            obj.parent.__adjust_mbr__()
+            # obj.parent.__adjust_mbr__()
         return [o[1] for o in res]
 
     def __search_kNN__(self, node, obj, res):
@@ -91,11 +91,11 @@ class RStarTree:
         else:
             branch_list = sorted([(obj.__compute_mindist__(r), obj.__compute_minmaxdist__(r), r) for r in node.children], key=lambda elt: elt[0])
             # max_possible_dist = min(np.min([elt[1] for elt in branch_list]), res[-1][0])  # do not work with k>1
-            max_possible_dist = res[-1][0]
+            max_possible_dist = np.square(res[-1][0])
             branch_list = [elt for elt in branch_list if elt[0] <= max_possible_dist]
             for elt in branch_list:
                 res = self.__search_kNN__(elt[2], obj, res)
-                while len(branch_list) > 0 and branch_list[-1][0] > res[-1][0]:
+                while len(branch_list) > 0 and branch_list[-1][0] > np.square(res[-1][0]):
                     branch_list.pop()
             return res
 

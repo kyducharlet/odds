@@ -208,6 +208,15 @@ class ILOF(BaseDetector):
                 RkNNs.append(o)
         return RkNNs
 
+    def __check_consistency__(self):
+        for obj in self.rst.objects:
+            for kNN in obj.__dict__["__kNNs__"]:
+                if obj not in kNN.__dict__["__RkNNs__"]:
+                    raise ValueError
+            for RkNN in obj.__dict__["__RkNNs__"]:
+                if obj not in RkNN.__dict__["__kNNs__"]:
+                    raise ValueError
+
     def copy(self):
         pass
 
