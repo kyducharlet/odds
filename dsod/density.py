@@ -109,9 +109,10 @@ class ILOF(BaseDetector):
                     p.__dict__["__RkNNs__"] = [obj]
                 else:
                     p.__dict__["__RkNNs__"].append(obj)
-            obj.__dict__["__lrd__"] = 1 / np.mean(obj.__dict__["__rds__"])
+            with np.errstate(divide='ignore'):
+                obj.__dict__["__lrd__"] = np.power(np.mean(obj.__dict__["__rds__"]), -1)
         for obj in objects_list:
-            obj.__dict__["__lof__"] = np.mean([p.__dict__["__lrd__"] for p in obj.__dict__["__kNNs__"]]) / obj.__dict__["__lrd__"]
+            obj.__dict__["__lof__"] = np.mean([p.__dict__["__lrd__"] for p in obj.__dict__["__kNNs__"]]) / obj.__dict__["__lrd__"] if obj.__dict__["__lrd__"] < np.infty else 0
 
     def __update_metrics_addition__(self, obj):
         ### Set obj kNNs
@@ -131,17 +132,22 @@ class ILOF(BaseDetector):
                 ### The k-distance will not change
                 o.__dict__["__kNNs__"].append(obj)
                 o.__dict__["__rds__"].append(max(obj.__compute_dist__(o), obj.__dict__["__k_dist__"]))
-                o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
+                with np.errstate(divide='ignore'):
+                    o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
             else:
-                ### The k-distance will change as the kthNN will
+                ### The k-distance may change
                 new_kNNs = o.__dict__["__kNNs__"] + [obj]
                 new_rds = o.__dict__["__rds__"] + [max(obj.__compute_dist__(o), obj.__dict__["__k_dist__"])]
                 o_new_metrics = sorted([(o.__compute_dist__(p), p, new_rds[i]) for i, p in enumerate(new_kNNs)], key=lambda elt: elt[0])
-                for old_kNN in [elt[1] for elt in o_new_metrics if elt[0] >= o.__dict__["__k_dist__"]]:
-                    old_kNN.__dict__["__RkNNs__"].remove(o)
-                o.__dict__["__kNNs__"] = [elt[1] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]
-                o.__dict__["__rds__"] = [elt[2] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]
-                o.__dict__["__k_dist__"] = [elt[0] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]][-1]
+                if len([elt for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]) < self.k:  # The old kthNN will remain and so the k-distance will not change
+                    o.__dict__["__kNNs__"] = [elt[1] for elt in o_new_metrics]
+                    o.__dict__["__rds__"] = [elt[2] for elt in o_new_metrics]
+                else:
+                    for old_kNN in [elt[1] for elt in o_new_metrics if elt[0] >= o.__dict__["__k_dist__"]]:  # The old kthNN has to be discarded and the k-distance will change
+                        old_kNN.__dict__["__RkNNs__"].remove(o)
+                    o.__dict__["__kNNs__"] = [elt[1] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]
+                    o.__dict__["__rds__"] = [elt[2] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]]
+                    o.__dict__["__k_dist__"] = [elt[0] for elt in o_new_metrics if elt[0] < o.__dict__["__k_dist__"]][-1]
                 o.parent.__update_k_dist__(o)
                 S_k_distance_updated.append(o)
         ### Compute obj rds and add obj to RkNNs of its kNNs
@@ -159,11 +165,13 @@ class ILOF(BaseDetector):
         ### Update lrds (no need to update lof as we do not follow its evolution)
         S_update_lrd = list(set(S_update_lrd))
         for o in S_update_lrd:
-            o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
+            with np.errstate(divide='ignore'):
+                o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
         ### Compute lrd
-        obj.__dict__["__lrd__"] = 1 / np.mean(obj.__dict__["__rds__"])
+        with np.errstate(divide='ignore'):
+            obj.__dict__["__lrd__"] = 1 / np.mean(obj.__dict__["__rds__"])
         ### Compute lof
-        obj.__dict__["__lof__"] = np.mean([o.__dict__["__lrd__"] for o in kNNs]) / obj.__dict__["__lrd__"]
+        obj.__dict__["__lof__"] = np.mean([o.__dict__["__lrd__"] for o in kNNs]) / obj.__dict__["__lrd__"] if obj.__dict__["__lrd__"] < np.infty else 0
 
     def __update_metrics_deletion__(self, obj):
         obj.parent.__update_k_dist__(obj)
@@ -177,8 +185,9 @@ class ILOF(BaseDetector):
             if len(o.__dict__["__kNNs__"]) > self.k:
                 ### We can remove obj without updating the k-distance
                 o.__dict__["__rds__"].pop(o.__dict__["__kNNs__"].index(obj))
-                o.__dict__["__kNNs__"].pop(obj)
-                o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
+                o.__dict__["__kNNs__"].remove(obj)
+                with np.errstate(divide='ignore'):
+                    o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
             else:
                 ### We need to update the k-distance with a new kthNN
                 o.__dict__["__kNNs__"] = self.rst.search_kNN(o)
@@ -216,6 +225,11 @@ class ILOF(BaseDetector):
             for RkNN in obj.__dict__["__RkNNs__"]:
                 if obj not in RkNN.__dict__["__kNNs__"]:
                     raise ValueError
+
+    def __check_kNNs_size__(self):
+        for obj in self.rst.objects:
+            if len(obj.__kNNs__) < self.k:
+                raise ValueError
 
     def copy(self):
         pass
