@@ -174,6 +174,8 @@ class ILOF(BaseDetector):
         obj.__dict__["__lof__"] = np.mean([o.__dict__["__lrd__"] for o in kNNs]) / obj.__dict__["__lrd__"] if obj.__dict__["__lrd__"] < np.infty else 0
 
     def __update_metrics_deletion__(self, obj):
+        """if obj.low[0, 0] == -0.09589041095890405 and obj.low[0, 1] == 0.7615992662100013:
+            pass"""
         obj.parent.__update_k_dist__(obj)
         S_update_k_distance = obj.__dict__["__RkNNs__"]
         ### Remove obj from the RkNNs list of its kNNs
@@ -190,12 +192,14 @@ class ILOF(BaseDetector):
                     o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
             else:
                 ### We need to update the k-distance with a new kthNN
+                old_kNNs = o.__dict__["__kNNs__"]
                 o.__dict__["__kNNs__"] = self.rst.search_kNN(o)
                 o.__dict__["__k_dist__"] = o.__compute_dist__(o.__dict__["__kNNs__"][-1])
                 o.parent.__update_k_dist__(o)
-                new_kNNs = o.__dict__["__kNNs__"][-1 - (len(o.__dict__["__kNNs__"]) - self.k):]
+                new_kNNs = [kNN for kNN in o.__dict__["__kNNs__"] if kNN not in old_kNNs]
                 for new_kNN in new_kNNs:
                     new_kNN.__dict__["__RkNNs__"].append(o)
+                # self.__check_consistency__()
                 o.__dict__["__rds__"] = [max(o.__compute_dist__(p), p.__dict__["__k_dist__"]) for p in o.__dict__["__kNNs__"]]
                 S_k_distance_updated.append(o)
         ### Update rds
@@ -209,6 +213,7 @@ class ILOF(BaseDetector):
         S_update_lrd = list(set(S_update_lrd))
         for o in S_update_lrd:
             o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
+        # self.__check_consistency__()
 
     def __search_RkNNs__(self, obj):
         RkNNs = []
@@ -219,12 +224,18 @@ class ILOF(BaseDetector):
 
     def __check_consistency__(self):
         for obj in self.rst.objects:
-            for kNN in obj.__dict__["__kNNs__"]:
+            for kNN in self.rst.search_kNN(obj):
+                if kNN not in obj.__kNNs__:
+                    raise ValueError
+            """for RkNN in self.rst.search_RkNN(obj):
+                if RkNN not in obj.__RkNNs__:
+                    raise ValueError"""
+            """for kNN in obj.__dict__["__kNNs__"]:
                 if obj not in kNN.__dict__["__RkNNs__"]:
-                    raise ValueError
-            for RkNN in obj.__dict__["__RkNNs__"]:
+                    raise ValueError"""
+            """for RkNN in obj.__dict__["__RkNNs__"]:
                 if obj not in RkNN.__dict__["__kNNs__"]:
-                    raise ValueError
+                    raise ValueError"""
 
     def __check_kNNs_size__(self):
         for obj in self.rst.objects:

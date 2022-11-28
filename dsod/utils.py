@@ -89,13 +89,14 @@ class RStarTree:
                             res = new_res
             return res
         else:
-            branch_list = sorted([(obj.__compute_mindist__(r), obj.__compute_minmaxdist__(r), r) for r in node.children], key=lambda elt: elt[0])
+            # branch_list = sorted([(obj.__compute_mindist__(r), obj.__compute_minmaxdist__(r), r) for r in node.children], key=lambda elt: elt[0])
+            branch_list = sorted([(obj.__compute_mindist__(r), r) for r in node.children], key=lambda elt: elt[0])
             # max_possible_dist = min(np.min([elt[1] for elt in branch_list]), res[-1][0])  # do not work with k>1
-            max_possible_dist = np.square(res[-1][0])
-            branch_list = [elt for elt in branch_list if elt[0] <= max_possible_dist]
+            max_possible_dist = res[-1][0]
+            branch_list = [elt for elt in branch_list if np.sqrt(elt[0]) <= max_possible_dist]
             for elt in branch_list:
-                res = self.__search_kNN__(elt[2], obj, res)
-                while len(branch_list) > 0 and branch_list[-1][0] > np.square(res[-1][0]):
+                res = self.__search_kNN__(elt[1], obj, res)
+                while len(branch_list) > 0 and np.sqrt(branch_list[-1][0]) > res[-1][0]:
                     branch_list.pop()
             return res
 
@@ -506,7 +507,7 @@ class RStarTreeNode:
     def __find_reachable__(self, obj, list):
         if self.level != self.leaf_level:
             for c in self.children:
-                if obj.__compute_mindist__(c) <= c.max_k_dist[0]:
+                if np.sqrt(obj.__compute_mindist__(c)) <= c.max_k_dist[0]:
                     c.__find_reachable__(obj, list)
         else:
             for c in self.children:
