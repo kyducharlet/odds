@@ -99,11 +99,9 @@ class SlidingMKDE(BaseDetector):
 
 
 class DyCF(BaseDetector):
-    def __init__(self, d: int = 2, r: float = 0.5, forget_factor: Union[float, type(None)] = None, reg="0"):
-        assert 0 < r <= 1
+    def __init__(self, d: int = 2, forget_factor: Union[float, type(None)] = None, reg="vu"):
         self.p = None
         self.d = d
-        self.r = r
         self.moments_matrix = MomentsMatrix(d, forget_factor=forget_factor)
         self.reg = reg
 
@@ -113,22 +111,14 @@ class DyCF(BaseDetector):
         self.__dict__["fit_shape"] = x.shape
         self.p = self.__dict__["fit_shape"][1]
         self.moments_matrix.fit(x)
-        if self.reg == "0":  # no regularization
+        if self.reg == "none":  # no regularization
             self.__dict__["regularizer"] = 1
-        elif self.reg == "1":  # \alpha is the most basic regularizer
-            self.__dict__["regularizer"] =comb(self.d + x.shape[1], self.d)
-        elif self.reg == "2":  # r * d * \alpha was the regulizer we used initially
-            self.__dict__["regularizer"] = self.r * self.d * comb(self.d + x.shape[1], self.d)
-        elif self.reg == "3":  # d ** {p+1} is the most inner border of the support
-            self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 1)
-        elif self.reg == "4":  # d ** {p+2} is the second most inner border of the support
-            self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 2)
-        elif self.reg == "5":  # exp(\srt(d) * \alpha) is the most outter border of the support
-            self.__dict__["regularizer"] = np.exp(comb(self.d + x.shape[1], self.d) * np.sqrt(self.d))
-        elif self.reg == "6":  # d ** {p+3} is between d ** {p+2} and exp(\srt(d) * \alpha)
-            self.__dict__["regularizer"] = np.power(self.d, x.shape[1] + 3)
+        elif self.reg == "alpha":  # \alpha is the most basic regularizer
+            self.__dict__["regularizer"] = comb(self.d + x.shape[1], self.d)
+        elif self.reg == "vu":
+            self.__dict__["regularizer"] = np.power(self.d, 3 * x.shape[1] / 2)
         else:
-            raise ValueError("reg should be one of 1, 2, 3, 4, 5 or 6")
+            raise ValueError("reg should be one of none, alpha or vu")
         return self
 
     def update(self, x):
@@ -179,7 +169,7 @@ class DyCF(BaseDetector):
         return preds
 
     def copy(self):
-        c_bis = DyCF(d=self.d, r=self.r)
+        c_bis = DyCF(d=self.d)
         c_bis.moments_matrix = self.moments_matrix.copy()
         if self.__dict__.get("fit_shape") is not None:
             c_bis.__dict__["fit_shape"] = self.__dict__["fit_shape"]
@@ -189,11 +179,11 @@ class DyCF(BaseDetector):
 
 
 class DyCG(BaseDetector):
-    def __init__(self, degrees: np.ndarray = np.array(range(2, 9)), r: float = 0.5, forget_factor: Union[float, type(None)] = None,
-                 decision="mean_growth", reg="6"):
+    def __init__(self, degrees: np.ndarray = np.array(range(2, 9)), forget_factor: Union[float, type(None)] = None,
+                 decision="mean_growth", reg="vu"):
         assert len(degrees) > 1
-        self.degrees = degrees
-        self.models = [DyCF(d=d, r=r, forget_factor=forget_factor, reg=reg) for d in degrees]
+        self.degrees = degrees if decision != "mean_growth" else degrees[[0, -1]]
+        self.models = [DyCF(d=d, forget_factor=forget_factor, reg=reg) for d in self.degrees]
         self.decision = decision
         self.p = None
 
