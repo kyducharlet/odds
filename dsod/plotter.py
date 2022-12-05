@@ -56,7 +56,7 @@ class LevelsetPlotter(BasePlotter):
 
     def plot_in_ax(self, x, ax, n_x1=100, n_x2=100, **kwargs):
         assert x.shape[1] == self.model.__dict__["p"]
-        ax.scatter(x[:, 0], x[:, 1], marker='x', s=20)
+        ax.scatter(x[:, 0], x[:, 1], marker='x', s=20, c='b')
         x1_margin = (np.max(x[:, 0]) - np.min(x[:, 0])) / 10
         x2_margin = (np.max(x[:, 1]) - np.min(x[:, 1])) / 10
         ax.set_xlim([np.min(x[:, 0]) - x1_margin, np.max(x[:, 0]) + x1_margin])
@@ -66,14 +66,22 @@ class LevelsetPlotter(BasePlotter):
         x1, x2 = np.meshgrid(X1, X2)
         x3 = np.c_[x1.ravel(), x2.ravel()]
         X3 = self.model.score_samples(x3).reshape(x1.shape)
-        percentiles = [25, 50, 75]
-        if kwargs.get("percentiles") is not None:
-            percentiles = kwargs["percentiles"]
-        levels = [np.percentile(X3, p) for p in percentiles]
-        cs = ax.contour(X1, X2, X3, levels=levels, colors="purple")
+        if kwargs.get("levels") is not None:
+            levels = kwargs["levels"]
+            strs = [f"s={l}" for l in levels]
+        else:
+            percentiles = [25, 50, 75]
+            if kwargs.get("percentiles") is not None:
+                percentiles = kwargs["percentiles"]
+            levels = [np.percentile(X3, p) for p in percentiles]
+            strs = [f"{p}%" for p in percentiles]
+
+        if kwargs.get("colors") is not None:
+            cs = ax.contour(X1, X2, X3, levels=levels, colors=kwargs["colors"])
+        else:
+            cs = ax.contour(X1, X2, X3, levels=levels, colors="purple")
 
         fmt = {}
-        strs = [f"{p}%" for p in percentiles]
         for l, s in zip(cs.levels, strs):
             fmt[l] = s
         plt.clabel(cs, cs.levels[::2], inline=True, fmt=fmt, fontsize=10)
