@@ -80,5 +80,5 @@ if __name__ == "__main__":
 
     METHODS_ILOF = generate_methods_from_params(PARAMS_ILOF, "ILOF", ILOF)
     compute_vm(METHODS_ILOF, data_dict, "choose_params_ilof", multi_processing=True)
-    METHODS_DILOF = generate_methods_from_params(PARAMS_DILOF, "DILOF", DILOF)
-    compute_vm(METHODS_DILOF, data_dict, "choose_params_dilof", multi_processing=True)
+    """METHODS_DILOF = generate_methods_from_params(PARAMS_DILOF, "DILOF", DILOF)
+    compute_vm(METHODS_DILOF, data_dict, "choose_params_dilof", multi_processing=True)"""
