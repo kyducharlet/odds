@@ -87,7 +87,8 @@ def multiprocessable_method(method, savename, x_train, x_test, y_test):
             y_decision = np.zeros(len(y_test))
             y_pred = np.zeros(len(y_test))
             start = time.time()
-            for i in tqdm(range(len(x_test)), desc=method["name"]):
+            """for i in tqdm(range(len(x_test)), desc=method["name"]):"""
+            for i in range(len(x_test)):
                 y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
                 y_pred[i] = -1 if y_decision[i] < 0 else 1
             eval_time = time.time() - start
@@ -101,6 +102,7 @@ def multiprocessable_method(method, savename, x_train, x_test, y_test):
                 "model_fit_time": fit_time,
                 "model_eval_time": eval_time,
             }
+            print(f"Method {method['name']} over.")
             with open(filename, "wb") as f:
                 pickle.dump(results, f)
 
