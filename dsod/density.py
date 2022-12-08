@@ -48,6 +48,7 @@ class ILOF(BaseDetector):
             obj = self.rst.insert_data(xx.reshape(1, -1))
             self.__update_metrics_addition__(obj)
             objects.append(obj)
+            self.__check_consistency__()
         return objects
 
     def score_samples(self, x):
@@ -177,7 +178,7 @@ class ILOF(BaseDetector):
         """if obj.low[0, 0] == -0.09589041095890405 and obj.low[0, 1] == 0.7615992662100013:
             pass"""
         obj.parent.__update_k_dist__(obj)
-        S_update_k_distance = obj.__dict__["__RkNNs__"]
+        S_update_k_distance = [o for o in obj.__dict__["__RkNNs__"] if o in self.rst.objects]
         ### Remove obj from the RkNNs list of its kNNs
         for o in obj.__dict__["__kNNs__"]:
             o.__dict__["__RkNNs__"].remove(obj)
@@ -224,9 +225,11 @@ class ILOF(BaseDetector):
 
     def __check_consistency__(self):
         for obj in self.rst.objects:
-            for kNN in self.rst.search_kNN(obj):
+            if obj not in obj.parent.children:
+                raise ValueError
+            """for kNN in self.rst.search_kNN(obj):
                 if kNN not in obj.__kNNs__:
-                    raise ValueError
+                    raise ValueError"""
             """for RkNN in self.rst.search_RkNN(obj):
                 if RkNN not in obj.__RkNNs__:
                     raise ValueError"""

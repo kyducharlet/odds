@@ -15,41 +15,176 @@ from dsod.density import ILOF
 from dsod.statistics import SlidingMKDE, DyCF, DyCG
 
 
+"""METHODS = [
+    {
+        "name": "DyCG",
+        "method": DyCG,
+        "params": {}
+    }, {
+        "name": "DyCF d=6 (tm)",
+        "method": DyCF,
+        "params": {
+            "d": 6,
+        }
+    }, {
+        "name": "DyCF d=8 (lc)",
+        "method": DyCF,
+        "params": {
+            "d": 8,
+        }
+    }, {
+        "name": "DyCF d=2 (http)",
+        "method": DyCF,
+        "params": {
+            "d": 2
+        }
+    }, {
+        "name": "SlidingMKDE W=200 (tm)",
+        "method": SlidingMKDE,
+        "params": {
+            "win_size": 200,
+        }
+    }, {
+        "name": "SlidingMKDE W=5000 (lc & http)",
+        "method": SlidingMKDE,
+        "params": {
+            "win_size": 5000,
+        }
+    }, {
+        "name": "OSCOD R=1.2 W=200 (tm)",
+        "method": OSCOD,
+        "params": {
+            "k": 10,  # need to be fixed but not used for evaluation
+            "R": 1.2,
+            "win_size": 200,
+        }
+    }, {
+        "name": "OSCOD R=0.2 W=100 (lc)",
+        "method": OSCOD,
+        "params": {
+            "k": 10,  # need to be fixed but not used for evaluation
+            "R": 0.2,
+            "win_size": 100,
+        }
+    }, {
+        "name": "OSCOD R=0.5 W=5000 (http)",
+        "method": OSCOD,
+        "params": {
+            "k": 10,  # need to be fixed but not used for evaluation
+            "R": 0.5,
+            "win_size": 5000,
+        }
+    },
+]"""
+
+
 METHODS = [
     {
-        "name": "ILOF k=10 W=1000 tau=1.1",
-        "method": ILOF,
+        "name": "DyCG reg=vu",
+        "method": DyCG,
         "params": {
-            "k": 10,
-            "threshold": 1.1,
-            "win_size": 1000,
+            "reg": "vu"
         }
     }, {
-        "name": "ILOF k=20 W=1000 tau=1.1",
-        "method": ILOF,
+        "name": "DyCG reg=alpha",
+        "method": DyCG,
         "params": {
-            "k": 20,
-            "threshold": 1.1,
-            "win_size": 1000,
+            "reg": "alpha"
         }
     }, {
-        "name": "ILOF k=10 W=1000 tau=1.05",
-        "method": ILOF,
+        "name": "DyCG reg=d_alpha",
+        "method": DyCG,
         "params": {
-            "k": 10,
-            "threshold": 1.05,
-            "win_size": 1000,
+            "reg": "d_alpha"
         }
     }, {
-        "name": "ILOF k=20 W=1000 tau=1.05",
+        "name": "DyCF d=6 (tm)",
+        "method": DyCF,
+        "params": {
+            "d": 6,
+        }
+    }, {
+        "name": "DyCF d=8 (lc)",
+        "method": DyCF,
+        "params": {
+            "d": 8,
+        }
+    }, {
+        "name": "DyCF d=2 (http)",
+        "method": DyCF,
+        "params": {
+            "d": 2
+        }
+    }, {
+        "name": "SlidingMKDE W=200 (tm)",
+        "method": SlidingMKDE,
+        "params": {
+            "win_size": 200,
+        }
+    }, {
+        "name": "SlidingMKDE W=5000 (lc & http)",
+        "method": SlidingMKDE,
+        "params": {
+            "win_size": 5000,
+        }
+    }, {
+        "name": "OSCOD R=1.2 W=200 (tm)",
+        "method": OSCOD,
+        "params": {
+            "k": 10,  # need to be fixed but not used for evaluation
+            "R": 1.2,
+            "win_size": 200,
+        }
+    }, {
+        "name": "OSCOD R=0.2 W=100 (lc)",
+        "method": OSCOD,
+        "params": {
+            "k": 10,  # need to be fixed but not used for evaluation
+            "R": 0.2,
+            "win_size": 100,
+        }
+    }, {
+        "name": "OSCOD R=0.5 W=5000 (http)",
+        "method": OSCOD,
+        "params": {
+            "k": 10,  # need to be fixed but not used for evaluation
+            "R": 0.5,
+            "win_size": 5000,
+        }
+    }, {
+        "name": "iLOF k=5 W=200",
         "method": ILOF,
         "params": {
-            "k": 20,
-            "threshold": 1.05,
-            "win_size": 1000,
+            "k": 5,
+            "win_size": 200,
+        }
+    }
+]
+
+
+"""METHODS = [
+    {
+        "name": "DyCG reg=vu",
+        "method": DyCG,
+        "params": {
+            "reg": "vu"
+        }
+    }, {
+        "name": "DyCG reg=alpha",
+        "method": DyCG,
+        "params": {
+            "reg": "alpha"
+        }
+    }, {
+        "name": "DyCG reg=d_alpha",
+        "method": DyCG,
+        "params": {
+            "reg": "d_alpha"
         }
     },
 ]
+    }
+]"""
 
 
 def average_precision_score(y_true, y_score, pos_label):
@@ -87,8 +222,8 @@ def multiprocessable_method(method, savename, x_train, x_test, y_test):
             y_decision = np.zeros(len(y_test))
             y_pred = np.zeros(len(y_test))
             start = time.time()
-            """for i in tqdm(range(len(x_test)), desc=method["name"]):"""
-            for i in range(len(x_test)):
+            for i in tqdm(range(len(x_test)), desc=method["name"]):
+                """for i in range(len(x_test)):"""
                 y_decision[i] = model.eval_update(x_test[i].reshape(1, -1))
                 y_pred[i] = -1 if y_decision[i] < 0 else 1
             eval_time = time.time() - start
@@ -102,7 +237,7 @@ def multiprocessable_method(method, savename, x_train, x_test, y_test):
                 "model_fit_time": fit_time,
                 "model_eval_time": eval_time,
             }
-            print(f"Method {method['name']} over.")
+            """print(f"Method {method['name']} over.")"""
             with open(filename, "wb") as f:
                 pickle.dump(results, f)
 
@@ -119,6 +254,30 @@ def compute_vm(methods, data, savename, multi_processing):
         pool = Pool()
         pool.starmap(multiprocessable_method, params)
         pool.close()
+
+
+def process_vm_results(methods, data, savename):
+    for k, v in data.items():
+        cols = ["AUROC", "AP", "Duration (fit)", "Duration (eval)", "Memory size"]
+        rows = []
+        table = []
+        for method in methods:
+            filename = savename + f"_{k}__{method['name']}.pickle"
+            with open(filename, "rb") as f:
+                results = pickle.load(f)
+            y_decision = results["y_decision"]
+            y_test = v["y_test"]
+            rows.append(method["name"])
+            roc_auc = roc_auc_score(y_test[~np.isnan(y_decision)], y_decision[~np.isnan(y_decision)])
+            average_p = average_precision_score(y_test[~np.isnan(y_decision)], y_decision[~np.isnan(y_decision)], pos_label=-1)
+            fit_time = results["model_fit_time"]
+            eval_time = results["model_eval_time"]
+            model_size = results["model_size"]
+            res_metric = [roc_auc, average_p]
+            res_int = [fit_time, eval_time, model_size]
+            table.append(['%1.9f' % v for v in res_metric] + [str(v) for v in res_int])
+        df = pd.DataFrame(data=table, columns=cols, index=rows)
+        df.to_csv(f"final_metrics_{savename}_{k}.csv")
 
 
 def compute(methods, x_train, x_test, y_test, savename, multi_processing=False, show=True, close=False):
@@ -176,23 +335,41 @@ def compute(methods, x_train, x_test, y_test, savename, multi_processing=False, 
 
 if __name__ == "__main__":
     warnings.filterwarnings("error")
+
+    data_dict = dict()
+
+    """ Dataset #1 """
+    split_pos = 500
     data = load_dataset("../res/two_moons.csv")
-    split_pos = 1000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "comparison_2moons", show=False, close=True)
+    data_dict["tm"] = {
+        "x_test": x_test,
+        "x_train": x_train,
+        "y_test": y_test,
+    }
+
+    """ Dataset #2 """
+    split_pos = 15000
     data = load_dataset("../res/conveyor.csv")
-    split_pos = 5000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "comparison_convey", show=False, close=True)
+    data_dict["lc"] = {
+        "x_test": x_test,
+        "x_train": x_train,
+        "y_test": y_test,
+    }
+
+    """ Dataset #3 """
+    split_pos = 50000
     data = load_dataset("../res/http.csv")
-    split_pos = 10000
     x_train, y_train, x_test, y_test = split_data(data, split_pos)
     del y_train
-    compute(METHODS, x_train, x_test, y_test, "comparison_http", show=False, close=True)
-    data = load_dataset("../res/four_modes.csv")
-    split_pos = 5000
-    x_train, y_train, x_test, y_test = split_data(data, split_pos)
-    del y_train
-    compute(METHODS, x_train, x_test, y_test, "comparison_4modes", show=False, close=True)
+    data_dict["http"] = {
+        "x_test": x_test,
+        "x_train": x_train,
+        "y_test": y_test,
+    }
+
+    compute_vm(METHODS, data_dict, "final_results", multi_processing=False)
+    process_vm_results(METHODS, data_dict, "final_results")

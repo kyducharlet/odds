@@ -659,10 +659,11 @@ class DILOFPoint:
 
     def compute_rds_lrd(self):
         self.rds = [max(q.kdist, np.linalg.norm(self.values - q.values)) for q in self.kNNs]
-        self.lrd = 1 / np.mean(self.rds)
+        with np.errstate(divide='ignore'):
+            self.lrd = 1 / np.mean(self.rds)
 
     def compute_lof(self):
-        self.lof = np.mean([p.lrd for p in self.kNNs]) / self.lrd
+        self.lof = np.mean([p.lrd for p in self.kNNs]) / self.lrd if self.lrd < np.infty else 0
 
     def update_dists(self, new_kNN, points, k):  # used to update kNNs, kdist and rds and to know what points need their lrd to be updated
         self.compute_kNNs_kdist(points + [new_kNN], k)  # Recompute entirely kNNs and kdist since it can have change with the removal of points
@@ -674,7 +675,8 @@ class DILOFPoint:
         return lrd_updates
 
     def update_lrd(self):  # update lrd based on already updated rds
-        self.lrd = 1 / np.mean(self.rds)
+        with np.errstate(divide='ignore'):
+            self.lrd = 1 / np.mean(self.rds)
 
     def get_local_kdist(self, points, k):  # used to compute a point kdist with a restricted dataset (or local dataset)
         dists = [np.linalg.norm(self.values - p.values) for p in points if p != self]
