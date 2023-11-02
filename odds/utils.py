@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
-from scipy import linalg
+from scipy.linalg import inv, pinv
+from scipy.integrate import nquad, trapezoid
+from math import comb, factorial
 import itertools
 import pickle
 from tqdm import tqdm
@@ -24,8 +26,13 @@ def gaussian_kernel(x):
         return np.array([gaussian_kernel(point.reshape(1, -1)) for point in x])
 
 
+def epanechnikov_kernel(x):
+    return np.array([np.product([0.75 * (1 - x[i, j] ** 2) for j in range(x.shape[1])]) if (x[i] ** 2 <= 1).all() else 0 for i in range(x.shape[0])])
+
+
 IMPLEMENTED_KERNEL_FUNCTIONS = {
     "gaussian": gaussian_kernel,
+    "epanechnikov": epanechnikov_kernel,
 }
 
 
@@ -33,13 +40,38 @@ IMPLEMENTED_KERNEL_FUNCTIONS = {
 
 
 def scott_rule(x):
-    ev = np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
+    ev = np.sqrt(5) * np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
     return np.diag(1 / ev), np.product(1 / ev)
 
 
 IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
     "scott": scott_rule,
 }
+
+
+""" DBOKDE / MDEFKDE : Estimation du nombre de voisins dans un certain rayon """
+
+
+def neighbours_count(x, okc, bsi, bdsi, ws, ss, R):
+    B = 1 / np.diagonal(bsi)
+    return (ws / ss) * 0.75 ** len(x) * bdsi * np.sum([
+        np.product((np.minimum(x + R, kc + B) - np.maximum(x - R, kc - B)) - (1 / 3) * np.dot(np.square(bsi), np.power(np.minimum(x + R, kc + B) - kc, 3) - np.power(np.maximum(x - R, kc - B) - kc, 3)))
+        for kc in okc
+    ])
+
+
+""" MDEFKDE : Estimation du nombre de voisins dans les cellules d'une grille """
+
+
+def neighbours_counts_in_grid(x, kcs, bsi, bdsi, ws, ss, m, r):
+    cells = itertools.product(*[range(2 ** m) for i in range(len(x))])
+    start = x - (2 ** m - 1) * r
+    counts = []
+    for cell in cells:
+        center = start + 2 * np.array(cell) * r
+        overlapping_kc = [kc for kc in kcs if (np.abs(kc - center) < (1 / np.diagonal(bsi)) + r).all()]
+        counts.append(neighbours_count(center, overlapping_kc, bsi, bdsi, ws, ss, r))
+    return np.array(counts)
 
 
 """ SmartSifter: Scoring functions """
@@ -765,7 +797,7 @@ def monomials(x, n):
     return np.power(x, n)
 
 
-def chebyshev(x, n):
+def chebyshev_t_1(x, n):  # Orthonormé sur [-1, 1] selon la mesure de Lebesgue avec 1 / sqrt(1 - x**2) comme poids
     if x < -1:
         return (-1)**n * np.cosh(n * np.arccosh(-x)) / np.sqrt((np.pi if n == 0 else np.pi / 2))
     elif x > 1:
@@ -774,26 +806,48 @@ def chebyshev(x, n):
         return np.cos(n * np.arccos(x)) / np.sqrt((np.pi if n == 0 else np.pi / 2))
 
 
+def chebyshev_t_2(x, n):  # Orthonormé sur [-1, 1] selon la mesure de Lebesgue avec 1 / sqrt(1 - x**2) comme poids
+    if n == 0:
+        return 1 / np.sqrt(np.pi)
+    else:
+        return (n / np.sqrt(np.pi / 2)) * np.sum([(-2)**i * (factorial(n + i - 1) / (factorial(n - i) * factorial(2 * i))) * (1 - x)**i for i in range(n+1)])
+
+
+def chebyshev_u(x, n):
+    if n == 0:
+        return np.sqrt(2 / np.pi)
+    else:
+        return np.sqrt(2 / np.pi) * np.sum([(-2)**i * (factorial(n + i - 1) / (factorial(n - i) * factorial(2 * i + 1))) * (1 - x)**i for i in range(n+1)])
+
+
+def legendre(x, n):  # # Orthonormé sur [-1, 1] selon la mesure de Lebesgue
+    return np.sqrt((2*n + 1) / 2) * np.sum([comb(n, i) * comb(n+i, i) * ((x - 1) / 2)**i for i in range(n+1)])
+
+
 IMPLEMENTED_POLYNOMIAL_BASIS = {
     "monomials": monomials,
-    "chebyshev": np.vectorize(chebyshev),
+    "legendre": np.vectorize(legendre),
+    "chebyshev": np.vectorize(chebyshev_u),
+    "chebyshev_t_1": np.vectorize(chebyshev_t_1),
+    "chebyshev_t_2": np.vectorize(chebyshev_t_2),
+    "chebyshev_u": np.vectorize(chebyshev_u),
 }
 
 
 """ DyCF: Incrementation options """
 
 
-def inverse_increment(mm, x, n):
+def inverse_increment(mm, x, n, inv_opt):
     moments_matrix = n * mm.__dict__["__moments_matrix"]
     for xx in x:
         v = mm.polynomial_func(xx, mm.__dict__["__monomials"])
         moments_matrix += np.dot(v, v.T)
     moments_matrix /= (n + x.shape[0])
     mm.__dict__["__moments_matrix"] = moments_matrix
-    mm.__dict__["__inverse_moments_matrix"] = linalg.inv(moments_matrix)
+    mm.__dict__["__inverse_moments_matrix"] = inv_opt(moments_matrix)
 
 
-def sherman_increment(mm, x, n):
+def sherman_increment(mm, x, n, inv_opt):
     inv_moments_matrix = mm.__dict__["__inverse_moments_matrix"] / n
     for xx in x:
         v = mm.polynomial_func(xx, mm.__dict__["__monomials"])
@@ -813,12 +867,13 @@ IMPLEMENTED_INCREMENTATION_OPTIONS = {
 
 
 class MomentsMatrix:
-    def __init__(self, d, incr_opt="inverse", polynomial_basis="monomials"):
+    def __init__(self, d, incr_opt="inverse", polynomial_basis="monomials", inv_opt="inv"):
         assert polynomial_basis in IMPLEMENTED_POLYNOMIAL_BASIS.keys()
         assert incr_opt in IMPLEMENTED_INCREMENTATION_OPTIONS.keys()
         self.d = d
-        self.polynomial_func = lambda x,m: PolynomialsBasis.apply_combinations(x, m, IMPLEMENTED_POLYNOMIAL_BASIS[polynomial_basis])
+        self.polynomial_func = lambda x, m: PolynomialsBasis.apply_combinations(x, m, IMPLEMENTED_POLYNOMIAL_BASIS[polynomial_basis])
         self.incr_func = IMPLEMENTED_INCREMENTATION_OPTIONS[incr_opt]
+        self.inv_opt = pinv if inv_opt == "pinv" else inv
 
     def fit(self, x):
         monomials = PolynomialsBasis.generate_combinations(self.d, x.shape[1])
@@ -830,7 +885,7 @@ class MomentsMatrix:
             moments_matrix += np.dot(v, v.T)
         moments_matrix /= len(x)
         self.__dict__["__moments_matrix"] = moments_matrix
-        self.__dict__["__inverse_moments_matrix"] = linalg.inv(moments_matrix)
+        self.__dict__["__inverse_moments_matrix"] = self.inv_opt(moments_matrix)
         return self
 
     def score_samples(self, x):
@@ -840,8 +895,45 @@ class MomentsMatrix:
             res.append(np.dot(np.dot(v.T, self.__dict__["__inverse_moments_matrix"]), v))
         return np.array(res).reshape(-1)
 
+    def __inv_score_samples_nquad__(self, *args):
+        return 1 / self.score_samples(np.array([[*args]]))[0]
+
+    def __inv_score_samples__(self, x):
+        return 1 / self.score_samples(x)
+
+    def estimate_neighbours_nquad(self, x, R):
+        lims = [[x[i] - R, x[i] + R] for i in range(len(x))]
+        return nquad(self.__inv_score_samples_nquad__, lims, opts={"epsabs": 1e-5})[0]
+
+    def estimate_neighbours(self, x, R, N):
+        estimation, err = montecarlo_integrate(self.__inv_score_samples__, x, N, len(x), R)
+        return estimation, err
+
+    def estimate_neighbours_in_grid_nquad(self, x, r, m):
+        cells = itertools.product(*[range(2 ** m) for i in range(len(x))])
+        start = x - (2 ** m - 1) * r
+        counts = []
+        for cell in cells:
+            center = start + 2 * np.array(cell) * r
+            lims = [[center[i] - r, center[i] + r] for i in range(len(center))]
+            counts.append(nquad(self.__inv_score_samples_nquad__, lims)[0])
+        return np.array(counts)
+
+    def estimate_neighbours_in_grid(self, x, r, m, N):
+        cells = itertools.product(*[range(2 ** m) for i in range(len(x))])
+        start = x - (2 ** m - 1) * r
+        counts = []
+        for cell in cells:
+            center = start + 2 * np.array(cell) * r
+            estimation, err = montecarlo_integrate(self.__inv_score_samples__, center, N, len(center), r)
+            counts.append(estimation)
+        return np.array(counts)
+
+    def estimate_MDEF(self, lims):
+        pass
+
     def update(self, x, n):
-        self.incr_func(self, x, n)
+        self.incr_func(self, x, n, self.inv_opt)
         return self
 
     def learned(self):
@@ -872,6 +964,21 @@ class PolynomialsBasis:
         assert type(m) == list
         result = basis_func(x, m)
         return np.product(result, axis=1).reshape(-1, 1)
+
+
+""" DBOECF & MDEFECF: Calcul dynamique de R """
+
+
+def update_params(old_mean, old_std, new_point, N):
+    new_mean = ((N - 1) / N) * old_mean + (1 / N) * new_point
+    new_std = ((N - 1) / N) * (old_std + (1 / N) * np.square(new_point - old_mean))
+    return new_mean, new_std
+
+
+def compute_R(std, N, p):
+    ev = np.sqrt(5) * np.maximum(std, 1e-32 * np.ones(p)) / np.power(N, 1 / (p + 4))
+    R = 0.5 * np.linalg.norm(ev) / np.sqrt(p)
+    return R
 
 
 """ Toolbox: Useful methods for comparison """
@@ -1032,11 +1139,60 @@ def split_data(data, split_pos):
     return train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
 
 
+def montecarlo_integrate(f, x, N, p, R):
+    samples = x.reshape(1, p) + R * np.random.uniform(-1, 1, (N, p))
+    estimates = f(samples)
+    estimates_2 = np.square(estimates)
+    volume = (2 * R) ** p
+    mean = np.sum(estimates) * volume / N
+    variance = (np.sum(estimates_2) * volume * volume / N) - mean ** 2
+    if variance < 0:
+        if abs(variance) < 1e-30:
+            variance = 0
+        else:
+            raise ValueError("Variance is negative.")
+    return mean, 1.96 * np.sqrt(variance / N)
+
+
 """ Toolbox : Comparison metrics """
 
 
-def average_precision_score(y_true, y_score, pos_label=-1):
-    y_score_ = y_score[y_true == pos_label]
-    y_preds = [np.where(y_score - threshold < 0, -1, 1) for threshold in y_score_]
-    precision_scores = [precision_score(y_true, y_pred, pos_label=pos_label, zero_division=0) for y_pred in y_preds]
+def average_precision_score(y_true, y_score):
+    score_outliers = y_score[y_true == -1]
+    precision_scores = [len(score_outliers[score_outliers < threshold]) / len(y_score[y_score < threshold]) if len(y_score[y_score < threshold]) != 0 else 1 for threshold in score_outliers]
     return np.mean(precision_scores)
+
+
+def roc_auc_score(y_true, y_score):
+    tpr, fpr, thresholds = roc_curve(y_true, y_score)
+    return trapezoid(tpr, fpr)
+
+
+def roc_curve(y_true, y_score):
+    score_outliers = y_score[y_true == -1]
+    score_inliers = y_score[y_true != -1]
+    thresholds = np.concatenate(([np.min(y_score)], np.unique(score_outliers), [np.max(y_score)]))
+    tpr = np.array([len(score_outliers[score_outliers < s]) / len(score_outliers) for s in thresholds])
+    fpr = np.array([len(score_inliers[score_inliers < s]) / len(score_inliers) for s in thresholds])
+    return tpr, fpr, thresholds
+
+
+def roc_and_pr_curve(y_true, y_score):
+    score_outliers = y_score[y_true == -1]
+    score_inliers = y_score[y_true != -1]
+    thresholds = np.concatenate(([np.min(y_score)], np.unique(score_outliers), [np.max(y_score)]))
+    tpr = np.array([len(score_outliers[score_outliers < s]) / len(score_outliers) for s in thresholds])
+    fpr = np.array([len(score_inliers[score_inliers < s]) / len(score_inliers) for s in thresholds])
+    prec = np.array([len(score_outliers[score_outliers < s]) / len(y_score[y_score < s]) if len(y_score[y_score < s]) != 0 else np.nan for s in thresholds])
+    return tpr, fpr, prec, thresholds
+
+
+def supervised_metrics(y_true, y_pred):
+    pred_outliers = y_pred[y_true == -1]
+    pred_inliers = y_pred[y_true == 1]
+    recall = len(pred_outliers[pred_outliers == -1]) / len(pred_outliers)  # TPR
+    specificity = len(pred_inliers[pred_inliers == 1]) / len(pred_inliers)  # 1 - FPR
+    precision = len(pred_outliers[pred_outliers == -1]) / len(y_pred[y_pred == -1]) if len(y_pred[y_pred == -1]) != 0 else np.nan
+    accuracy = (recall + specificity) / 2
+    f_score = 2 * recall * precision / (recall + precision) if recall + precision != 0 else 0
+    return recall, specificity, precision, accuracy, f_score

@@ -3,6 +3,7 @@ from .utils import np
 from .utils import IMPLEMENTED_KERNEL_FUNCTIONS, IMPLEMENTED_BANDWIDTH_ESTIMATORS
 from .utils import MomentsMatrix
 from .utils import SDEM, IMPLEMENTED_SS_SCORING_FUNCTIONS
+from math import comb
 
 
 class SlidingMKDE(BaseDetector):
@@ -50,8 +51,9 @@ class SlidingMKDE(BaseDetector):
 
     def update(self, x: np.ndarray):
         self.assert_shape_fitted(x)
-        self.kc = np.concatenate([self.kc[len(self.kc) - self.win_size + len(x):], x[-self.win_size:]])
+        self.kc = np.concatenate([self.kc[max(0, len(self.kc) - self.win_size + len(x)):], x[-self.win_size:]])
         self.bsi, self.bdsi = self.be(self.kc)
+        return self
 
     def score_samples(self, x):
         self.assert_shape_fitted(x)
@@ -63,7 +65,7 @@ class SlidingMKDE(BaseDetector):
 
     def decision_function(self, x):
         self.assert_shape_fitted(x)
-        return (1 / (1 + self.threshold)) - self.score_samples(x)
+        return (1 / self.score_samples(x)) - 1 - self.threshold
 
     def predict(self, x):
         self.assert_shape_fitted(x)
@@ -98,7 +100,7 @@ class SlidingMKDE(BaseDetector):
 
 
 class SmartSifter(BaseDetector):
-    def __init__(self, threshold: float, k: int, r: float, alpha: float, scoring_function: str = "logloss"):
+    def __init__(self, threshold: float, k: int, r: float, alpha: float, scoring_function: str = "likelihood"):
         assert scoring_function in IMPLEMENTED_SS_SCORING_FUNCTIONS.keys()
         self.r = r
         self.alpha = alpha
@@ -126,12 +128,17 @@ class SmartSifter(BaseDetector):
             for i in range(len(x)):
                 scores[i], = self.scoring_function(x[i].reshape(1, -1), self.sdem)
             return scores
+        elif self.scoring_function_str == "likelihood":
+            return 1 / (1 + self.scoring_function(x, self.sdem))
         else:
             return self.scoring_function(x, self.sdem)
 
     def decision_function(self, x):
         self.assert_shape_fitted(x)
-        return self.threshold - self.score_samples(x)
+        if self.scoring_function_str == "likelihood":
+            return (1 / self.score_samples(x)) - 1 - self.threshold
+        else:
+            return self.threshold - self.score_samples(x)
 
     def predict(self, x):
         self.assert_shape_fitted(x)
@@ -184,11 +191,12 @@ class DyCF(BaseDetector):
     See BaseDetector methods
     """
 
-    def __init__(self, d: int, incr_opt: str="inverse", polynomial_basis: str="monomials", regularization: str="vu"):
+    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu", C: float = 1, inv: str = "inv"):
         self.N = 0  # number of points integrated in the moments matrix
+        self.C = C
         self.p = None
         self.d = d
-        self.moments_matrix = MomentsMatrix(d, incr_opt=incr_opt, polynomial_basis=polynomial_basis)
+        self.moments_matrix = MomentsMatrix(d, incr_opt=incr_opt, polynomial_basis=polynomial_basis, inv_opt=inv)
         self.regularization = regularization
 
     def fit(self, x: np.ndarray):
@@ -196,7 +204,14 @@ class DyCF(BaseDetector):
         self.N = x.shape[0]
         self.p = x.shape[1]
         self.moments_matrix.fit(x)
-        self.__dict__["regularizer"] = np.power(self.d, 3 * x.shape[1] / 2) if self.regularization == "vu" else 1
+        if self.regularization == "vu":
+            self.__dict__["regularizer"] = self.d ** (3 * self.p / 2)
+        elif self.regularization == "vu_C":
+            self.__dict__["regularizer"] = (self.d ** (3 * self.p / 2)) / self.C
+        elif self.regularization == "comb":
+            self.__dict__["regularizer"] = comb(self.d + x.shape[1], x.shape[1])
+        else:
+            self.__dict__["regularizer"] = 1
         return self
 
     def update(self, x):
@@ -211,7 +226,7 @@ class DyCF(BaseDetector):
 
     def decision_function(self, x):
         self.assert_shape_fitted(x)
-        return 1 - self.score_samples(x)
+        return (1 / self.score_samples(x)) - 1
 
     def predict(self, x):
         self.assert_shape_fitted(x)
