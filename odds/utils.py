@@ -44,8 +44,15 @@ def scott_rule(x):
     return np.diag(1 / ev), np.product(1 / ev)
 
 
+def scott_rule_with_R(x):
+    ev = np.sqrt(5) * np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
+    R = 0.5 * np.linalg.norm(ev) / np.sqrt(x.shape[1])
+    return R, np.diag(1 / ev), np.product(1 / ev)
+
+
 IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
     "scott": scott_rule,
+    "scott_with_R": scott_rule_with_R,
 }
 
 

@@ -1,6 +1,6 @@
 from typing import Union
 from .base import BaseDetector
-from .utils import np, linalg
+from .utils import np
 from .utils import IMPLEMENTED_BANDWIDTH_ESTIMATORS, neighbours_count, neighbours_counts_in_grid
 from .utils import MTree, MTreePoint
 from .utils import RStarTree
@@ -74,7 +74,7 @@ class ILOF(BaseDetector):
         lof_scores = []
         for xx in x:
             kNNs = self.rst.search_kNN(xx.reshape(1, -1))
-            rds = [max(linalg.norm(xx.reshape(1, -1) - o.low), o.__dict__["__k_dist__"]) for o in kNNs]
+            rds = [max(np.linalg.norm(xx.reshape(1, -1) - o.low), o.__dict__["__k_dist__"]) for o in kNNs]
             lrd = 1 / np.mean(rds)
             lof_scores.append(np.mean([o.__dict__["__lrd__"] for o in kNNs]) / lrd)
         return np.array(lof_scores)
