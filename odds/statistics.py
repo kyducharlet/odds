@@ -93,10 +93,19 @@ class KDE(BaseDetector):
         return preds
 
     def save_model(self):
-        raise NotImplementedError("Not implemented yet.")
+        return {
+            "p": self.p,
+            "kc": self.kc.tolist(),
+            "bsi": self.bsi.tolist(),
+            "bdsi": self.bdsi,
+        }
 
     def load_model(self, model_dict: dict):
-        raise NotImplementedError("Not implemented yet.")
+        self.p = model_dict["p"]
+        self.kc = np.array(model_dict["kc"])
+        self.bsi = np.array(model_dict["bsi"])
+        self.bdsi = model_dict["bdsi"]
+        return self
 
     def copy(self):
         model_bis = KDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
