@@ -56,6 +56,14 @@ class BaseDetector(ABC):
         pass
 
     @abstractmethod
+    def save_model(self):
+        pass
+
+    @abstractmethod
+    def load_model(self, model_dict: dict):
+        pass
+
+    @abstractmethod
     def copy(self):
         pass
 

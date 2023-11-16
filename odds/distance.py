@@ -95,6 +95,12 @@ class DBOKDE(BaseDetector):
             self.update(x[i].reshape(1, -1))
         return preds
 
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
+
     def copy(self):
         model_bis = DBOKDE(self.k, self.R, self.sample_size, self.win_size)
         model_bis.__offset__ = self.__offset__
@@ -205,6 +211,12 @@ class DBOECF(BaseDetector):
     def predict_update(self, x):
         evals = self.eval_update(x)
         return np.where(evals < 0, -1, 1)
+
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
 
     def copy(self):
         raise NotImplementedError("Not implemented yet for DBOECF.")

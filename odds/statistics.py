@@ -12,14 +12,19 @@ class KDE(BaseDetector):
 
     Attributes
     ----------
-    threshold: float
-        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
-    win_size: int
-        size of the window of kernel centers to keep in memory
-    kernel: str, optional
-        the type of kernel to use (default is "gaussian")
-    bandwidth: str, optional
-        rule of thumb to compute the bandwidth (default is "scott")
+    d: int
+        the degree of polynomials, usually set between 2 and 8
+    C: float, optional
+        define a threshold on the score; when used with regularization="vu", usually C<=1 (default is 1)
+    incr_opt: str, optional
+        can be either "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
+    polynomial_basis: str, optional
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre",
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
+    regularization: str, optional
+        one of "vu" (score divided by d^{3p/2}) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu")
+    inv: str, optional
+        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "inv")
 
     Methods
     -------
@@ -86,6 +91,12 @@ class KDE(BaseDetector):
             preds[i] = self.predict(x[i].reshape(1, -1))
             self.update(x[i].reshape(1, -1))
         return preds
+
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
 
     def copy(self):
         model_bis = KDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
@@ -186,6 +197,12 @@ class SmartSifter(BaseDetector):
         evals = self.eval_update(x)
         return np.where(evals < 0, -1, 1)
 
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
+
     def copy(self):
         raise NotImplementedError("The copy method for SmartSifter has not been implemented yet.")
 
@@ -200,13 +217,18 @@ class DyCF(BaseDetector):
     Attributes
     ----------
     d: int
-        the degree of polynomials
+        the degree of polynomials, usually set between 2 and 8
     incr_opt: str, optional
-        whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
+        can be either "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
     polynomial_basis: str, optional
-        whether "monomials" to use the monomials basis or "chebyshev" to use the Chebyshev polynomials (default is "monomials")
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre",
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
     regularization: str, optional
-        one of "vu" (score divided by d^{3p/2}) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu")
+        one of "vu" (score divided by d^{3p/2}), "vu_C" (score divided by d^{3p/2}/C), "comb" (score divided by comb(p+d, d)) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu_C")
+    C: float, optional
+        define a threshold on the score when used with regularization="vu_C", usually C<=1 (default is 1)
+    inv: str, optional
+        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "inv")
 
     Methods
     -------
@@ -220,6 +242,7 @@ class DyCF(BaseDetector):
         self.d = d
         self.moments_matrix = MomentsMatrix(d, incr_opt=incr_opt, polynomial_basis=polynomial_basis, inv_opt=inv)
         self.regularization = regularization
+        self.regularizer = None
 
     def fit(self, x: np.ndarray):
         self.assert_shape_unfitted(x)
@@ -227,13 +250,13 @@ class DyCF(BaseDetector):
         self.p = x.shape[1]
         self.moments_matrix.fit(x)
         if self.regularization == "vu":
-            self.__dict__["regularizer"] = self.d ** (3 * self.p / 2)
+            self.regularizer = self.d ** (3 * self.p / 2)
         elif self.regularization == "vu_C":
-            self.__dict__["regularizer"] = (self.d ** (3 * self.p / 2)) / self.C
+            self.regularizer = (self.d ** (3 * self.p / 2)) / self.C
         elif self.regularization == "comb":
-            self.__dict__["regularizer"] = comb(self.d + x.shape[1], x.shape[1])
+            self.regularizer = comb(self.d + x.shape[1], x.shape[1])
         else:
-            self.__dict__["regularizer"] = 1
+            self.regularizer = 1
         return self
 
     def update(self, x):
@@ -244,7 +267,7 @@ class DyCF(BaseDetector):
 
     def score_samples(self, x):
         self.assert_shape_fitted(x)
-        return self.moments_matrix.score_samples(x.reshape(-1, self.p)) / self.__dict__["regularizer"]
+        return self.moments_matrix.score_samples(x.reshape(-1, self.p)) / self.regularizer
 
     def decision_function(self, x):
         self.assert_shape_fitted(x)
@@ -277,14 +300,24 @@ class DyCF(BaseDetector):
             self.update(xx.reshape(-1, self.p))
         return preds
 
+    def save_model(self):
+        return {
+            "N": self.N,
+            "p": self.p,
+            "moment_matrix": self.moments_matrix.save_model()
+        }
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
+
     def copy(self):
         c_bis = DyCF(d=self.d)
         c_bis.moments_matrix = self.moments_matrix.copy()
         c_bis.N = self.N
         if self.p is not None:
             c_bis.p = self.p
-        if self.__dict__.get("regularizer") is not None:
-            c_bis.__dict__["regularizer"] = self.__dict__["regularizer"]
+        if self.regularizer is not None:
+            c_bis.regularizer = self.regularizer
         return c_bis
 
     def method_name(self):
@@ -293,7 +326,7 @@ class DyCF(BaseDetector):
 
 class DyCG(BaseDetector):
     """
-    Dynamical Christoffel Function
+    Dynamical Christoffel Growth
 
     Attributes
     ----------
@@ -361,6 +394,12 @@ class DyCG(BaseDetector):
             preds[i] = self.predict(d_)
             self.update(d_)
         return preds
+
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
 
     def copy(self):
         mc_bis = DyCG(degrees=self.degrees)

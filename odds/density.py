@@ -118,6 +118,12 @@ class MDEFKDE(BaseDetector):
             self.update(x[i].reshape(1, -1))
         return preds
 
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
+
     def copy(self):
         model_bis = MDEFKDE(self.k, self.R, self.alpha, self.sample_size, self.win_size)
         model_bis.be = self.be
@@ -234,6 +240,12 @@ class MDEFECF(BaseDetector):
 
     def predict_update(self, x):
         return np.where(self.eval_update(x) < 0, -1, 1)
+
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
 
     def copy(self):
         raise NotImplementedError("Not implemented yet for MDEFECF.")

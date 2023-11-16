@@ -212,25 +212,28 @@ class MomentsMatrix:
         self.polynomial_func = lambda x, m: PolynomialsBasis.apply_combinations(x, m, IMPLEMENTED_POLYNOMIAL_BASIS[polynomial_basis])
         self.incr_func = IMPLEMENTED_INCREMENTATION_OPTIONS[incr_opt]
         self.inv_opt = pinv if inv_opt == "pinv" else inv
+        self.monomials = None
+        self.moments_matrix = None
+        self.inverse_moments_matrix = None
 
     def fit(self, x):
         monomials = PolynomialsBasis.generate_combinations(self.d, x.shape[1])
-        self.__dict__["__monomials"] = monomials
+        self.monomials = monomials
         len_m = len(monomials)
         moments_matrix = np.zeros((len_m, len_m), dtype=x.dtype)
         for xx in x:
             v = self.polynomial_func(xx, monomials)
             moments_matrix += np.dot(v, v.T)
         moments_matrix /= len(x)
-        self.__dict__["__moments_matrix"] = moments_matrix
-        self.__dict__["__inverse_moments_matrix"] = self.inv_opt(moments_matrix)
+        self.moments_matrix = moments_matrix
+        self.inverse_moments_matrix = self.inv_opt(moments_matrix)
         return self
 
     def score_samples(self, x):
         res = []
         for xx in x:
-            v = self.polynomial_func(xx, self.__dict__["__monomials"])
-            res.append(np.dot(np.dot(v.T, self.__dict__["__inverse_moments_matrix"]), v))
+            v = self.polynomial_func(xx, self.monomials)
+            res.append(np.dot(np.dot(v.T, self.inverse_moments_matrix), v))
         return np.array(res).reshape(-1)
 
     def __inv_score_samples_nquad__(self, *args):
@@ -267,23 +270,33 @@ class MomentsMatrix:
             counts.append(estimation)
         return np.array(counts)
 
-    def estimate_MDEF(self, lims):
-        pass
-
     def update(self, x, n):
         self.incr_func(self, x, n, self.inv_opt)
         return self
 
+    def save_model(self):
+        serializable_monomials = None
+        serializable_moments_matrix = self.moments_matrix.tolist()
+        serializable_inverse_moments_matrix = self.inverse_moments_matrix.tolist()
+        return {
+            "monomials": serializable_monomials,
+            "moments_matrix": serializable_moments_matrix,
+            "inverse_moments_matrix": serializable_inverse_moments_matrix,
+        }
+
+    def load_model(self, model_dict):
+        pass
+
     def learned(self):
-        return self.__dict__.get("__inverse_moments_matrix") is not None
+        return self.inverse_moments_matrix is not None
 
     def copy(self):
         mm_bis = MomentsMatrix(d=self.d)
         mm_bis.polynomial_func = self.polynomial_func
         mm_bis.incr_func = self.incr_func
-        mm_bis.__dict__["__monomials"] = self.__dict__["__monomials"]
-        mm_bis.__dict__["__moments_matrix"] = self.__dict__["__moments_matrix"]
-        mm_bis.__dict__["__inverse_moments_matrix"] = self.__dict__["__inverse_moments_matrix"]
+        mm_bis.monomials = self.monomials
+        mm_bis.moments_matrix = self.moments_matrix
+        mm_bis.inverse_moments_matrix = self.inverse_moments_matrix
         return mm_bis
 
 
