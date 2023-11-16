@@ -6,7 +6,7 @@ from .utils import SDEM, IMPLEMENTED_SS_SCORING_FUNCTIONS
 from math import comb
 
 
-class SlidingMKDE(BaseDetector):
+class KDE(BaseDetector):
     """
     Multivariate Kernel Density Estimation with Sliding Windows
 
@@ -88,7 +88,7 @@ class SlidingMKDE(BaseDetector):
         return preds
 
     def copy(self):
-        model_bis = SlidingMKDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
+        model_bis = KDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
         model_bis.kc = self.kc
         model_bis.bsi = self.bsi
         model_bis.bdsi = self.bdsi
@@ -96,7 +96,7 @@ class SlidingMKDE(BaseDetector):
         return model_bis
 
     def method_name(self):
-        return "Sliding MKDE"
+        return "KDE"
 
 
 class SmartSifter(BaseDetector):
@@ -213,7 +213,7 @@ class DyCF(BaseDetector):
     See BaseDetector methods
     """
 
-    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu", C: float = 1, inv: str = "inv"):
+    def __init__(self, d: int, C: float = 1, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu", inv: str = "inv"):
         self.N = 0  # number of points integrated in the moments matrix
         self.C = C
         self.p = None

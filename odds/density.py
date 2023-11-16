@@ -2,8 +2,6 @@ from typing import Union
 from .base import BaseDetector
 from .utils import np
 from .utils import IMPLEMENTED_BANDWIDTH_ESTIMATORS, neighbours_count, neighbours_counts_in_grid
-from .utils import MTree, MTreePoint
-from .utils import RStarTree
 from .utils import MomentsMatrix, update_params, compute_R
 from tqdm import trange
 

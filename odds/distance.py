@@ -2,7 +2,6 @@ from typing import Union
 import numpy as np
 
 from .base import BaseDetector
-from .utils import MTree
 from .utils import IMPLEMENTED_BANDWIDTH_ESTIMATORS, neighbours_count
 from .utils import MomentsMatrix, update_params, compute_R
 from tqdm import trange
