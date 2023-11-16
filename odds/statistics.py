@@ -308,7 +308,9 @@ class DyCF(BaseDetector):
         }
 
     def load_model(self, model_dict: dict):
-        raise NotImplementedError("Not implemented yet.")
+        self.N = model_dict["N"]
+        self.p = model_dict["p"]
+        self.moments_matrix = self.moments_matrix.load_model(model_dict)
 
     def copy(self):
         c_bis = DyCF(d=self.d)

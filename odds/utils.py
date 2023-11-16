@@ -275,17 +275,19 @@ class MomentsMatrix:
         return self
 
     def save_model(self):
-        serializable_monomials = None
         serializable_moments_matrix = self.moments_matrix.tolist()
         serializable_inverse_moments_matrix = self.inverse_moments_matrix.tolist()
         return {
-            "monomials": serializable_monomials,
+            "monomials": self.monomials,
             "moments_matrix": serializable_moments_matrix,
             "inverse_moments_matrix": serializable_inverse_moments_matrix,
         }
 
     def load_model(self, model_dict):
-        pass
+        self.monomials = model_dict["monomials"]
+        self.moments_matrix = model_dict["moments_matrix"]
+        self.inverse_moments_matrix = model_dict["inverse_moments_matrix"]
+        return self
 
     def learned(self):
         return self.inverse_moments_matrix is not None
