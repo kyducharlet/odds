@@ -100,6 +100,28 @@ class SlidingMKDE(BaseDetector):
 
 
 class SmartSifter(BaseDetector):
+    """
+    Smart Sifter reduced to continuous domain only with its Sequentially Discounting Expectation and Maximizing (SDEM) algorithm
+    (see https://github.com/sk1010k/SmartSifter and https://scikit-learn.org/stable/modules/generated/sklearn.mixture.GaussianMixture.html)
+
+    Attributes
+    ----------
+    threshold: float
+        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
+    k: int
+        number of gaussian mixture components ("n_components" from sklearn.mixture.GaussianMixture)
+    r: float
+        discounting parameter for the SDEM algorithm ("r" from smartsifter.SDEM)
+    alpha: float
+        stability parameter for the weights of gaussian mixture components ("alpha" from smartsifter.SDEM)
+    scoring_function: str
+        scoring function used, either "logloss" for logarithmic loss or "hellinger" for hellinger score, both proposed by the original article,
+        or "likelihood" for the likelihood that a point is issued from the learned mixture (default is "likelihood")
+
+    Methods
+    -------
+    See BaseDetector methods
+    """
     def __init__(self, threshold: float, k: int, r: float, alpha: float, scoring_function: str = "likelihood"):
         assert scoring_function in IMPLEMENTED_SS_SCORING_FUNCTIONS.keys()
         self.r = r
