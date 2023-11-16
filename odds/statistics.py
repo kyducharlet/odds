@@ -398,10 +398,18 @@ class DyCG(BaseDetector):
         return preds
 
     def save_model(self):
-        raise NotImplementedError("Not implemented yet.")
+        return {
+            "p": self.p,
+            "models": [
+                dycf_model.save_model() for dycf_model in self.models
+            ]
+        }
 
     def load_model(self, model_dict: dict):
-        raise NotImplementedError("Not implemented yet.")
+        self.p = model_dict["p"]
+        for (i, dycf_model_dict) in enumerate(model_dict["models"]):
+            self.models[i].load_model(dycf_model_dict)
+        return self
 
     def copy(self):
         mc_bis = DyCG(degrees=self.degrees)
