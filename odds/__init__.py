@@ -14,3 +14,9 @@ __all__ = [
     "MDEFECF",
     "LevelsetPlotter",
 ]
+
+DICT_OF_METHODS = {
+    "kde": KDE,
+    "dycf": DyCF,
+    "dycg": DyCG,
+}
