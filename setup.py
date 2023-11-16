@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='datastream-outlier-detection',
-    version='0.1',
+    version='0.1.0',
     packages=['odds'],
     url='https://gitlab.forge.berger-levrault.com/bl-drit/odds',
     license='',
