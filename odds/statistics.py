@@ -308,7 +308,7 @@ class DyCF(BaseDetector):
         return {
             "N": self.N,
             "p": self.p,
-            "moment_matrix": self.moments_matrix.save_model()
+            "moments_matrix": self.moments_matrix.save_model()
         }
 
     def load_model(self, model_dict: dict):
