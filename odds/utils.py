@@ -176,23 +176,23 @@ IMPLEMENTED_POLYNOMIAL_BASIS = {
 
 
 def inverse_increment(mm, x, n, inv_opt):
-    moments_matrix = n * mm.__dict__["__moments_matrix"]
+    moments_matrix = n * mm.moments_matrix
     for xx in x:
-        v = mm.polynomial_func(xx, mm.__dict__["__monomials"])
+        v = mm.polynomial_func(xx, mm.monomials)
         moments_matrix += np.dot(v, v.T)
     moments_matrix /= (n + x.shape[0])
-    mm.__dict__["__moments_matrix"] = moments_matrix
-    mm.__dict__["__inverse_moments_matrix"] = inv_opt(moments_matrix)
+    mm.moments_matrix = moments_matrix
+    mm.inverse_moments_matrix = inv_opt(moments_matrix)
 
 
 def sherman_increment(mm, x, n, inv_opt):
-    inv_moments_matrix = mm.__dict__["__inverse_moments_matrix"] / n
+    inv_moments_matrix = mm.inverse_moments_matrix / n
     for xx in x:
-        v = mm.polynomial_func(xx, mm.__dict__["__monomials"])
+        v = mm.polynomial_func(xx, mm.monomials)
         a = np.matmul(np.matmul(inv_moments_matrix, np.dot(v, v.T)), inv_moments_matrix)
         b = np.dot(np.dot(v.T, inv_moments_matrix), v)
         inv_moments_matrix -= a / (1 + b)
-    mm.__dict__["__inverse_moments_matrix"] = (n + x.shape[0]) * inv_moments_matrix
+    mm.inverse_moments_matrix = (n + x.shape[0]) * inv_moments_matrix
 
 
 IMPLEMENTED_INCREMENTATION_OPTIONS = {
