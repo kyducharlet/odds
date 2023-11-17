@@ -12,19 +12,14 @@ class KDE(BaseDetector):
 
     Attributes
     ----------
-    d: int
-        the degree of polynomials, usually set between 2 and 8
-    C: float, optional
-        define a threshold on the score; when used with regularization="vu", usually C<=1 (default is 1)
-    incr_opt: str, optional
-        can be either "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
-    polynomial_basis: str, optional
-        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre",
-        varying this parameter can bring stability to the score in some cases (default is "monomials")
-    regularization: str, optional
-        one of "vu" (score divided by d^{3p/2}) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu")
-    inv: str, optional
-        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "inv")
+    threshold: float
+        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
+    win_size: int
+        size of the window of kernel centers to keep in memory
+    kernel: str, optional
+        the type of kernel to use, can be either "gaussian" or "epanechnikov" (default is "gaussian")
+    bandwidth: str, optional
+        rule of thumb to compute the bandwidth, "scott" is the only one implemented for now (default is "scott")
 
     Methods
     -------
@@ -319,7 +314,7 @@ class DyCF(BaseDetector):
     def load_model(self, model_dict: dict):
         self.N = model_dict["N"]
         self.p = model_dict["p"]
-        self.moments_matrix = self.moments_matrix.load_model(model_dict)
+        self.moments_matrix = self.moments_matrix.load_model(model_dict["moments_matrix"])
 
     def copy(self):
         c_bis = DyCF(d=self.d)
