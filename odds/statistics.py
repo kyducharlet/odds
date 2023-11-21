@@ -13,7 +13,7 @@ class KDE(BaseDetector):
     Attributes
     ----------
     threshold: float
-        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
+        the threshold on the pdf, if the pdf computed for a point is greater than the threshold then the point is considered normal
     win_size: int
         size of the window of kernel centers to keep in memory
     kernel: str, optional
@@ -122,7 +122,7 @@ class SmartSifter(BaseDetector):
     Attributes
     ----------
     threshold: float
-        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
+        the threshold on the pdf, if the pdf computed for a point is greater than the threshold then the point is considered normal
     k: int
         number of gaussian mixture components ("n_components" from sklearn.mixture.GaussianMixture)
     r: float
@@ -239,7 +239,7 @@ class DyCF(BaseDetector):
     See BaseDetector methods
     """
 
-    def __init__(self, d: int, C: float = 1, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu", inv: str = "inv"):
+    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu_C", C: float = 1, inv: str = "inv"):
         self.N = 0  # number of points integrated in the moments matrix
         self.C = C
         self.p = None
@@ -337,7 +337,7 @@ class DyCG(BaseDetector):
     Attributes
     ----------
     degrees: ndarray, optional
-        the degrees of two DyCF models inside (default is np.array([2, 8]))
+        the degrees of at least two DyCF models inside (default is np.array([2, 8]))
     dycf_kwargs:
         see DyCF args others than d
 

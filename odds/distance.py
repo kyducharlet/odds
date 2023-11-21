@@ -15,26 +15,26 @@ class DBOKDE(BaseDetector):
     ----------
     k: int
         a threshold on the number of neighbours needed to consider the point as normal
-    R: float
-        the distance defining the neighborhood around a point
-    sample_size: int
-        the number of points used as kernel centers for the KDE
+    R: float or str
+        the distance defining the neighborhood around a point, can be computed dynamically, in this case set R="dynamic"
     win_size: int
         the number of points in the sliding window used in neighbours count
+    sample_size: int, optional
+        the number of points used as kernel centers for the KDE, if sample_size=-1 then sample_size is set to win_size (default is -1)
 
     Methods
     -------
     See BaseDetector methods
     """
-    def __init__(self,  k: int, R: Union[float, str], sample_size: int, win_size: int):
+    def __init__(self,  k: int, R: Union[float, str], win_size: int, sample_size: int = -1):
         assert sample_size <= win_size
         assert sample_size > 0
         self.k = k
         self.__offset__ = 1 / (1 + k)
         self.R = R if R != "dynamic" else None
         self.R_strategy = R if R == "dynamic" else None
-        self.sample_size = sample_size
         self.win_size = win_size
+        self.sample_size = win_size if sample_size == -1 else sample_size
         self.be = IMPLEMENTED_BANDWIDTH_ESTIMATORS["scott"] if self.R_strategy is None else IMPLEMENTED_BANDWIDTH_ESTIMATORS["scott_with_R"]
         self.points = None  # kernel centers
         self.rd_s = None # random sample
@@ -127,10 +127,13 @@ class DBOECF(BaseDetector):
         the distance defining the neighborhood around a point
     d: int
         the degree for the ECF
+    N_sample: int, optional
+        number of samples used to estimate the Christoffel function's integral (default is 100)
     incr_opt: str, optional
         whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
     polynomial_basis: str, optional
-        whether "monomials" to use the monomials basis, "legendre" to use the Legendre polynomials or "chebyshev" to use the Chebyshev polynomials (default is "monomials")
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre",
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
 
     Methods
     -------
