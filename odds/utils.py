@@ -19,15 +19,18 @@ import warnings
 """ KDE: Kernel functions """
 
 
-def gaussian_kernel(x):
-    if x.shape[0] == 1:
-        return np.exp(-1 * np.dot(x, x.T)[0, 0] / 2) / np.power(np.sqrt(2 * np.pi), x.shape[1])
-    else:
-        return np.array([gaussian_kernel(point.reshape(1, -1)) for point in x])
+"""def gaussian_kernel(x, kc, bsi, bdsi):
+    value = np.dot(bsi, (kc - x).T).T
+    return np.array([bdsi * np.exp(-1 * np.dot(elt.reshape(1, -1), elt.reshape(-1, 1))[0, 0] / 2) / np.power(np.sqrt(2 * np.pi), elt.shape[0]) for elt in value])"""
 
 
-def epanechnikov_kernel(x):
-    return np.array([np.product([0.75 * (1 - x[i, j] ** 2) for j in range(x.shape[1])]) if (x[i] ** 2 <= 1).all() else 0 for i in range(x.shape[0])])
+def gaussian_kernel(x, kc, bsi, bdsi):
+    return np.array([np.sqrt(bdsi) * np.exp(-1 * np.dot(np.dot(elt.reshape(1, -1), bsi), elt.reshape(-1, 1))[0, 0] / 2) / np.power(np.sqrt(2 * np.pi), elt.shape[0]) for elt in x - kc])
+
+
+def epanechnikov_kernel(x, kc, bsi, bdsi):
+    value = np.dot(bsi, (kc - x).T).T
+    return np.array([bdsi * np.prod([0.75 * (1 - value[i, j] ** 2) for j in range(value.shape[1])]) if (value[i] ** 2 <= 1).all() else 0 for i in range(value.shape[0])])
 
 
 IMPLEMENTED_KERNEL_FUNCTIONS = {
@@ -41,13 +44,13 @@ IMPLEMENTED_KERNEL_FUNCTIONS = {
 
 def scott_rule(x):
     ev = np.sqrt(5) * np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
-    return np.diag(1 / ev), np.product(1 / ev)
+    return np.diag(1 / ev), np.prod(1 / ev)
 
 
 def scott_rule_with_R(x):
-    ev = np.sqrt(5) * np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
+    ev = scott_rule(x)
     R = 0.5 * np.linalg.norm(ev) / np.sqrt(x.shape[1])
-    return R, np.diag(1 / ev), np.product(1 / ev)
+    return R, np.diag(1 / ev), np.prod(1 / ev)
 
 
 IMPLEMENTED_BANDWIDTH_ESTIMATORS = {

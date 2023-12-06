@@ -59,7 +59,8 @@ class KDE(BaseDetector):
         self.assert_shape_fitted(x)
         res = np.zeros(x.shape[0])
         for i, point in enumerate(x):
-            ke = self.bdsi * self.kf(np.dot(self.bsi, (self.kc - point).T).T)
+            # ke = self.bdsi * self.kf(np.dot(self.bsi, (self.kc - point).T).T)
+            ke = self.kf(point, self.kc, self.bsi, self.bdsi)
             res[i] = np.mean(ke)
         return 1 / (1 + res)
 
