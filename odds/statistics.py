@@ -309,16 +309,20 @@ class DyCF(BaseDetector):
         return {
             "N": self.N,
             "p": self.p,
+            "regularization": self.regularization,
+            "regularizer": self.regularizer,
             "moments_matrix": self.moments_matrix.save_model()
         }
 
     def load_model(self, model_dict: dict):
         self.N = model_dict["N"]
         self.p = model_dict["p"]
+        self.regularization = model_dict["regularization"]
+        self.regularizer = model_dict["regularizer"]
         self.moments_matrix = self.moments_matrix.load_model(model_dict["moments_matrix"])
 
     def copy(self):
-        c_bis = DyCF(d=self.d)
+        c_bis = DyCF(d=self.d, regularization=self.regularization)
         c_bis.moments_matrix = self.moments_matrix.copy()
         c_bis.N = self.N
         if self.p is not None:
@@ -404,6 +408,7 @@ class DyCG(BaseDetector):
 
     def save_model(self):
         return {
+            "degrees": self.degrees.tolist(),
             "p": self.p,
             "models": [
                 dycf_model.save_model() for dycf_model in self.models
@@ -411,6 +416,7 @@ class DyCG(BaseDetector):
         }
 
     def load_model(self, model_dict: dict):
+        self.degrees = np.array(model_dict["degrees"])
         self.p = model_dict["p"]
         for (i, dycf_model_dict) in enumerate(model_dict["models"]):
             self.models[i].load_model(dycf_model_dict)
