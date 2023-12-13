@@ -39,7 +39,7 @@ IMPLEMENTED_KERNEL_FUNCTIONS = {
 }
 
 
-""" SlidingMKDE: Bandwidth estimators """
+""" KDE: Bandwidth estimators """
 
 
 def scott_rule(x):
