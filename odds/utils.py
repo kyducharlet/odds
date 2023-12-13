@@ -43,9 +43,10 @@ def scott_rule(x):
 
 
 def scott_rule_with_R(x):
-    ev = scott_rule(x)
+    inverse_mat, inverse_mat_det = scott_rule(x)
+    ev = 1 / np.diagonal(inverse_mat)
     R = 0.5 * np.linalg.norm(ev) / np.sqrt(x.shape[1])
-    return R, np.diag(1 / ev), np.prod(1 / ev)
+    return R, inverse_mat, inverse_mat_det
 
 
 IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
@@ -60,7 +61,7 @@ IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
 def neighbours_count(x, okc, bsi, bdsi, ws, ss, R):
     B = 1 / np.diagonal(bsi)
     return (ws / ss) * 0.75 ** len(x) * bdsi * np.sum([
-        np.product((np.minimum(x + R, kc + B) - np.maximum(x - R, kc - B)) - (1 / 3) * np.dot(np.square(bsi), np.power(np.minimum(x + R, kc + B) - kc, 3) - np.power(np.maximum(x - R, kc - B) - kc, 3)))
+        np.prod((np.minimum(x + R, kc + B) - np.maximum(x - R, kc - B)) - (1 / 3) * np.dot(np.square(bsi), np.power(np.minimum(x + R, kc + B) - kc, 3) - np.power(np.maximum(x - R, kc - B) - kc, 3)))
         for kc in okc
     ])
 
@@ -387,9 +388,9 @@ class RStarTreeNode:
             sum_margin_values = 0
             for j in range(self.max_size - 2 * self.min_size + 2):
                 first_group = sorted_entries[:self.min_size + j]
-                fg_margin = np.product(np.max([r.high for r in first_group], axis=0) - np.min([r.low for r in first_group], axis=0)) - np.sum([r.__compute_volume__() for r in first_group])
+                fg_margin = np.prod(np.max([r.high for r in first_group], axis=0) - np.min([r.low for r in first_group], axis=0)) - np.sum([r.__compute_volume__() for r in first_group])
                 second_group = sorted_entries[self.min_size + j:]
-                sg_margin = np.product(np.max([r.high for r in second_group], axis=0) - np.min([r.low for r in second_group], axis=0)) - np.sum([r.__compute_volume__() for r in second_group])
+                sg_margin = np.prod(np.max([r.high for r in second_group], axis=0) - np.min([r.low for r in second_group], axis=0)) - np.sum([r.__compute_volume__() for r in second_group])
                 sum_margin_values += fg_margin + sg_margin
             if sum_margin_values < best_axis[1]:
                 best_axis = (i, sum_margin_values)
@@ -405,20 +406,20 @@ class RStarTreeNode:
             second_group = sorted_entries[self.min_size + j:]
             sg_low = np.min([r.low for r in second_group], axis=0)
             sg_high = np.max([r.high for r in second_group], axis=0)
-            overlap_volume = np.product(np.maximum(np.zeros(fg_low.shape), np.minimum(fg_high, sg_high) - np.maximum(fg_low, sg_low)))
+            overlap_volume = np.prod(np.maximum(np.zeros(fg_low.shape), np.minimum(fg_high, sg_high) - np.maximum(fg_low, sg_low)))
             if overlap_volume <= best_index[1]:
-                total_volume = np.product(fg_high - fg_low) + np.product(sg_high - sg_low)
+                total_volume = np.prod(fg_high - fg_low) + np.prod(sg_high - sg_low)
                 if overlap_volume < best_index[1] or total_volume < best_index[2]:
                     best_index = (j, overlap_volume, total_volume, first_group, second_group)
         return best_index[0], best_index[3], best_index[4]
 
     def __compute_volume__(self):
-        return np.product(self.high - self.low)
+        return np.prod(self.high - self.low)
 
     def __compute_volume_enlargement__(self, obj):
         new_low = np.minimum(self.low, obj.low)
         new_high = np.maximum(self.high, obj.high)
-        return np.product(new_high - new_low) - self.__compute_volume__()
+        return np.prod(new_high - new_low) - self.__compute_volume__()
 
     def __compute_overlap_enlargement__(self, compared_nodes, obj):
         new_low = np.minimum(self.low, obj.low)
@@ -428,10 +429,10 @@ class RStarTreeNode:
         for node in compared_nodes:
             min_high = np.minimum(self.high, node.high)
             max_low = np.maximum(self.low, node.low)
-            old_overlap += np.product(np.maximum(np.zeros(min_high.shape), min_high - max_low))
+            old_overlap += np.prod(np.maximum(np.zeros(min_high.shape), min_high - max_low))
             min_high = np.minimum(new_high, node.high)
             max_low = np.maximum(new_low, node.low)
-            new_overlap += np.product(np.maximum(np.zeros(min_high.shape), min_high - max_low))
+            new_overlap += np.prod(np.maximum(np.zeros(min_high.shape), min_high - max_low))
         return new_overlap - old_overlap
 
     def __adjust_mbr__(self):
@@ -491,7 +492,7 @@ class RStarTreeNode:
                 c.__get_all_objects__(res)
 
     def __lt__(self, other):
-        return np.product(self.high - self.low) < np.product(other.high - other.low)
+        return np.prod(self.high - self.low) < np.prod(other.high - other.low)
 
     def copy(self, levels, index, parent, tree):
         rstn_bis = RStarTreeNode(self.min_size, self.max_size, self.p, levels[index], parent, self.reinsert_strategy, tree)
@@ -516,7 +517,7 @@ class RStarTreeObject:
         self.parent = None
 
     def __compute_volume__(self):
-        return np.product(self.high - self.low)
+        return np.prod(self.high - self.low)
 
     def __compute_dist__(self, obj):
         return np.linalg.norm(obj.low - self.low)
@@ -533,7 +534,7 @@ class RStarTreeObject:
         self.parent.remove_data(self)
 
     def __lt__(self, other):
-        return np.product(self.high - self.low) < other.product(self.high - self.low)
+        return np.prod(self.high - self.low) < other.product(self.high - self.low)
 
     def copy(self, parent):
         r_bis = RStarTreeObject(self.low.copy(), self.high.copy())
@@ -968,7 +969,7 @@ class PolynomialsBasis:
     def apply_combinations(x, m, basis_func):
         assert type(m) == list
         result = basis_func(x, m)
-        return np.product(result, axis=1).reshape(-1, 1)
+        return np.prod(result, axis=1).reshape(-1, 1)
 
 
 """ DBOECF & MDEFECF: Calcul dynamique de R """
