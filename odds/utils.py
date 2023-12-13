@@ -48,9 +48,10 @@ def scott_rule(x):
 
 
 def scott_rule_with_R(x):
-    ev = scott_rule(x)
+    im, imd = scott_rule(x)
+    ev = 1 / np.diagonal(im)
     R = 0.5 * np.linalg.norm(ev) / np.sqrt(x.shape[1])
-    return R, np.diag(1 / ev), np.prod(1 / ev)
+    return R, im, imd
 
 
 IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
