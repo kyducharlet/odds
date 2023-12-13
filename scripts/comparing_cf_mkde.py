@@ -1,4 +1,4 @@
-from odds.statistics import DyCF, SlidingMKDE
+from odds.statistics import DyCF, KDE
 from odds.utils import load_dataset, roc_auc_score, average_precision_score
 from odds.plotter import LevelsetPlotter
 import time
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     cf_lp = LevelsetPlotter(cf)
 
     # Multivariate KDE
-    mkde = SlidingMKDE(threshold=0.1, win_size=data.shape[0])
+    mkde = KDE(threshold=0.1, win_size=data.shape[0])
     start = time.time()
     mkde.fit(data)
     print(f"MKDE fit: {time.time() - start}s")

@@ -1,12 +1,12 @@
 from .density import ILOF
 from .distance import OSCOD
-from .statistics import SlidingMKDE, SmartSifter, DyCF, DyCG
+from .statistics import KDE, SmartSifter, DyCF, DyCG
 from .plotter import LevelsetPlotter, MTreePlotter, RStarTreePlotter
 
 __all__ = [
     "ILOF",
     "OSCOD",
-    "SlidingMKDE",
+    "KDE",
     "SmartSifter",
     "DyCF",
     "DyCG",

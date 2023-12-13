@@ -6,20 +6,20 @@ from .utils import SDEM, IMPLEMENTED_SS_SCORING_FUNCTIONS
 from math import comb
 
 
-class SlidingMKDE(BaseDetector):
+class KDE(BaseDetector):
     """
     Multivariate Kernel Density Estimation with Sliding Windows
 
     Attributes
     ----------
     threshold: float
-        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
+        the threshold on the pdf, if the pdf computed for a point is greater than the threshold then the point is considered normal
     win_size: int
         size of the window of kernel centers to keep in memory
     kernel: str, optional
-        the type of kernel to use (default is "gaussian")
+        the type of kernel to use, can be either "gaussian" or "epanechnikov" (default is "gaussian")
     bandwidth: str, optional
-        rule of thumb to compute the bandwidth (default is "scott")
+        rule of thumb to compute the bandwidth, "scott" is the only one implemented for now (default is "scott")
 
     Methods
     -------
@@ -88,7 +88,7 @@ class SlidingMKDE(BaseDetector):
         return preds
 
     def copy(self):
-        model_bis = SlidingMKDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
+        model_bis = KDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
         model_bis.kc = self.kc
         model_bis.bsi = self.bsi
         model_bis.bdsi = self.bdsi
@@ -96,7 +96,7 @@ class SlidingMKDE(BaseDetector):
         return model_bis
 
     def method_name(self):
-        return "Sliding MKDE"
+        return "KDE"
 
 
 class SmartSifter(BaseDetector):

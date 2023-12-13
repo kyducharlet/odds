@@ -1,4 +1,4 @@
-from odds.statistics import DyCF, DyCG, SlidingMKDE, SmartSifter
+from odds.statistics import DyCF, DyCG, KDE, SmartSifter
 from odds.distance import OSCOD
 from odds.density import ILOF
 from odds.utils import load_dataset, split_data, compute_and_save, plot_and_save_results
@@ -34,7 +34,7 @@ METHODS = [
         "short_name": "DyCF (http)"
     }, {
         "name": "SlidingMKDE W=200 (tm)",
-        "method": SlidingMKDE,
+        "method": KDE,
         "params": {
             "threshold": 0.1,  # need to be fixed but not used for evaluation
             "win_size": 200,
@@ -42,7 +42,7 @@ METHODS = [
         "short_name": "S. MKDE (tm)"
     }, {
         "name": "SlidingMKDE W=5000 (lc & http)",
-        "method": SlidingMKDE,
+        "method": KDE,
         "params": {
             "threshold": 0.1,  # need to be fixed but not used for evaluation
             "win_size": 5000,

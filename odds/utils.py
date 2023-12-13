@@ -16,7 +16,7 @@ from smartsifter import SDEM
 import warnings
 
 
-""" SlidingMKDE: Kernel functions """
+""" KDE: Kernel functions """
 
 
 def gaussian_kernel(x):
@@ -36,7 +36,7 @@ IMPLEMENTED_KERNEL_FUNCTIONS = {
 }
 
 
-""" SlidingMKDE: Bandwidth estimators """
+""" KDE: Bandwidth estimators """
 
 
 def scott_rule(x):
@@ -54,6 +54,7 @@ IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
     "scott": scott_rule,
     "scott_with_R": scott_rule_with_R,
 }
+
 
 
 """ DBOKDE / MDEFKDE : Estimation du nombre de voisins dans un certain rayon """
