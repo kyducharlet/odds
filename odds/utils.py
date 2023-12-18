@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import inv, pinv
 from scipy.integrate import nquad, trapezoid
+from pyfaust import rand
+from pyfaust.fact import eigtj
 from math import comb, factorial
 import itertools
 import pickle
@@ -847,7 +849,7 @@ def inverse_increment(mm, x, n, inv_opt):
     moments_matrix = n * mm.moments_matrix
     for xx in x:
         v = mm.polynomial_func(xx, mm.monomials)
-        moments_matrix += np.dot(v, v.T)
+        moments_matrix += v @ v.T
     moments_matrix /= (n + x.shape[0])
     mm.moments_matrix = moments_matrix
     mm.inverse_moments_matrix = inv_opt(moments_matrix)
@@ -857,8 +859,8 @@ def sherman_increment(mm, x, n, inv_opt):
     inv_moments_matrix = mm.inverse_moments_matrix / n
     for xx in x:
         v = mm.polynomial_func(xx, mm.monomials)
-        a = np.matmul(np.matmul(inv_moments_matrix, np.dot(v, v.T)), inv_moments_matrix)
-        b = np.dot(np.dot(v.T, inv_moments_matrix), v)
+        a = inv_moments_matrix @ v @ v.T @ inv_moments_matrix
+        b = v.T @ inv_moments_matrix @ v
         inv_moments_matrix -= a / (1 + b)
     mm.inverse_moments_matrix = (n + x.shape[0]) * inv_moments_matrix
 
@@ -869,6 +871,21 @@ IMPLEMENTED_INCREMENTATION_OPTIONS = {
 }
 
 
+""" DyCF: Matrix inversion options """
+
+
+def faust_inv(M):
+    D, U = eigtj(M, nGivens=5*M.shape[0])
+    return U @ np.diag(1 / D) @ U.T
+
+
+IMPLEMENTED_INVERSION_OPTIONS = {
+    "inv": inv,
+    "pinv": pinv,
+    "faust_inv": faust_inv
+}
+
+
 """ DyCF: Moments matrix """
 
 
@@ -876,10 +893,11 @@ class MomentsMatrix:
     def __init__(self, d, incr_opt="inverse", polynomial_basis="monomials", inv_opt="inv"):
         assert polynomial_basis in IMPLEMENTED_POLYNOMIAL_BASIS.keys()
         assert incr_opt in IMPLEMENTED_INCREMENTATION_OPTIONS.keys()
+        assert inv_opt in IMPLEMENTED_INVERSION_OPTIONS.keys()
         self.d = d
         self.polynomial_func = lambda x, m: PolynomialsBasis.apply_combinations(x, m, IMPLEMENTED_POLYNOMIAL_BASIS[polynomial_basis])
         self.incr_func = IMPLEMENTED_INCREMENTATION_OPTIONS[incr_opt]
-        self.inv_opt = pinv if inv_opt == "pinv" else inv
+        self.inv_func = IMPLEMENTED_INVERSION_OPTIONS[inv_opt]
         self.monomials = None
         self.moments_matrix = None
         self.inverse_moments_matrix = None
@@ -894,7 +912,7 @@ class MomentsMatrix:
             moments_matrix += np.dot(v, v.T)
         moments_matrix /= len(x)
         self.moments_matrix = moments_matrix
-        self.inverse_moments_matrix = self.inv_opt(moments_matrix)
+        self.inverse_moments_matrix = self.inv_func(moments_matrix)
         return self
 
     def score_samples(self, x):
@@ -939,7 +957,7 @@ class MomentsMatrix:
         return np.array(counts)
 
     def update(self, x, n):
-        self.incr_func(self, x, n, self.inv_opt)
+        self.incr_func(self, x, n, self.inv_func)
         return self
 
     def save_model(self):
