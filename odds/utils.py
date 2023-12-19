@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from scipy.linalg import inv, pinv
+from scipy.linalg import inv, pinv, solve, lapack
 from scipy.integrate import nquad, trapezoid
 from pyfaust.fact import eigtj
 from math import comb, factorial
@@ -15,6 +15,9 @@ from sklearn.metrics import roc_auc_score, precision_score
 from sklearn.base import clone
 from smartsifter import SDEM
 import warnings
+
+
+inds_cache = {}
 
 
 """ KDE: Kernel functions """
@@ -210,14 +213,43 @@ IMPLEMENTED_INCREMENTATION_OPTIONS = {
 
 
 def faust_inv(M):
-    D, U = eigtj(M, nGivens=5*M.shape[0])
+    D, U = eigtj(M, nGivens=5*M.shape[0], enable_large_Faust=True)
     return U @ np.diag(1 / D) @ U.T
+
+
+def pd_inv(M):  # according to: https://stackoverflow.com/a/40709871
+    n = M.shape[0]
+    I = np.identity(n)
+    return solve(M, I, assume_a="pos", overwrite_b=True)
+
+
+def upper_triangular_to_symmetric(ut):
+    n = ut.shape[0]
+    try:
+        inds = inds_cache[n]
+    except KeyError:
+        inds = np.tri(n, k=-1, dtype=bool)
+        inds_cache[n] = inds
+    ut[inds] = ut.T[inds]
+
+
+def fpd_inv(M):  # according to: https://stackoverflow.com/a/58719188
+    cholesky, info = lapack.dpotrf(M)
+    if info != 0:
+        raise ValueError('dpotrf failed on input {}'.format(M))
+    inv, info = lapack.dpotri(cholesky)
+    if info != 0:
+        raise ValueError('dpotri failed on input {}'.format(cholesky))
+    upper_triangular_to_symmetric(inv)
+    return inv
 
 
 IMPLEMENTED_INVERSION_OPTIONS = {
     "inv": inv,
     "pinv": pinv,
-    "faust_inv": faust_inv
+    "faust_inv": faust_inv,
+    "pd_inv": pd_inv,
+    "fpd_inv": fpd_inv,
 }
 
 
@@ -315,6 +347,7 @@ class MomentsMatrix:
         mm_bis = MomentsMatrix(d=self.d)
         mm_bis.polynomial_func = self.polynomial_func
         mm_bis.incr_func = self.incr_func
+        mm_bis.inv_func = self.inv_func
         mm_bis.monomials = self.monomials
         mm_bis.moments_matrix = self.moments_matrix
         mm_bis.inverse_moments_matrix = self.inverse_moments_matrix
