@@ -2,40 +2,27 @@
 
 ## Description
 
-This repository is code material for the "Leveraging the Christoffel Function for Outlier Detection in Data Streams" article.
-
-Its primary use is for reproducibility purposes. 
-However, it can also be used as a Python framework for outlier detection in data streams and comparison purposes.
+This is a Python framework for outlier detection in data streams.
 
 ## How to install
 
-With Python 3.10 installed, you just need to be in the repository and run:
+With Python 3.11 installed, you can either run the following command within the repository folder, which can be useful to modify some parts:
 
 ```shell 
 pip install -e .
 ```
 
-## How to use for reproducibility
+or install from git:
 
-### Section 3.4
+```shell
+pip install git+https://gitlab.forge.berger-levrault.com/bl-drit/bl.drit.experiments/machine.learning/odds.git@bl-predict
+```
 
-In order to get the results from section 3.4 of the article, you have to run ```scripts/comparing_cf_mkde.py```.
+The best way is to use personal access tokens (see: https://docs.readthedocs.io/en/stable/guides/private-python-packages.html#gitlab) and:
 
-This will generate two files: 
-* ```scripts/cf_vs_kde.csv``` which contains the AP and AUROC metrics,
-* ```scripts/cf_vs_kde.png``` which contains the graph.
-
-### Section 5.3
-
-In order to get the results from section 5.3 of the article, you have to run ```scripts/evaluating_methods.py```.
-
-Optional: Because this requires the training of all the models, we have put all the results in the ```res/results``` folder. Copy the content of this folder and paste it in the ```scripts``` folder to quickly generate the resulting files.
-
-This will generate four files:
-* ```scripts/evaluating_method_tm.csv``` which contains the AP, AUROC, duration and memory results for the two_moons dataset,
-* ```scripts/evaluating_method_lc.csv``` which contains the AP, AUROC, duration and memory results for the luggage_conveyor dataset,
-* ```scripts/evaluating_method_http.csv``` which contains the AP, AUROC, duration and memory results for the http dataset,
-* ```scripts/evaluating_method.png``` which contains the graph.
+```shell
+pip install git+https://${GITLAB_TOKEN_USER}:${GITLAB_TOKEN}@gitlab.forge.berger-levrault.com/bl-drit/bl.drit.experiments/machine.learning/odds.git@bl-predict
+```
 
 ## How to use as a framework
 
@@ -45,89 +32,152 @@ If you want to use this repository as a framework, note that you can use newer v
 
 Here we describe the different methods already implemented in this framework and their parameters.
 
-#### DyCF
+#### Statistical methods
+
+##### KDE
+
+Kernel Density Estimation with sliding windows
+
+    Attributes
+    ----------
+    threshold: float
+        the threshold on the pdf, if the pdf computed for a point is greater than the threshold then the point is considered normal
+    win_size: int
+        size of the window of kernel centers to keep in memory
+    kernel: str, optional
+        the type of kernel to use, can be either "gaussian" or "epanechnikov" (default is "gaussian")
+    bandwidth: str, optional
+        rule of thumb to compute the bandwidth, "scott" is the only one implemented for now (default is "scott")
+
+##### SmartSifter
+
+Smart Sifter reduced to continuous domain only with its Sequentially Discounting Expectation and Maximizing (SDEM) algorithm
+(see https://github.com/sk1010k/SmartSifter and https://scikit-learn.org/stable/modules/generated/sklearn.mixture.GaussianMixture.html)
+
+    Attributes
+    ----------
+    threshold: float
+        the threshold on the pdf, if the pdf computed for a point is greater than the threshold then the point is considered normal
+    k: int
+        number of gaussian mixture components ("n_components" from sklearn.mixture.GaussianMixture)
+    r: float
+        discounting parameter for the SDEM algorithm ("r" from smartsifter.SDEM)
+    alpha: float
+        stability parameter for the weights of gaussian mixture components ("alpha" from smartsifter.SDEM)
+    scoring_function: str
+        scoring function used, either "logloss" for logarithmic loss or "hellinger" for hellinger score, both proposed by the original article,
+        or "likelihood" for the likelihood that a point is issued from the learned mixture (default is "likelihood")
+
+##### DyCF
 
 Dynamical Christoffel Function
 
     Attributes
     ----------
     d: int
-        the degree of polynomials
+        the degree of polynomials, usually set between 2 and 8
     incr_opt: str, optional
-        whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
+        can be either "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
     polynomial_basis: str, optional
-        whether "monomials" to use the monomials basis or "chebyshev" to use the Chebyshev polynomials (default is "monomials")
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre", 
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
     regularization: str, optional
-        one of "vu" (score divided by d^{3p/2}) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu")
+        one of "vu" (score divided by d^{3p/2}), "vu_C" (score divided by d^{3p/2}/C), "comb" (score divided by comb(p+d, d)) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu_C")
+    C: float, optional
+        define a threshold on the score when used with regularization="vu_C", usually C<=1 (default is 1)
+    inv: str, optional
+        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "inv")
 
-#### DyCG
+##### DyCG
 
-Dynamical Christoffel Function
+Dynamical Christoffel Growth
 
     Attributes
     ----------
     degrees: ndarray, optional
-        the degrees of two DyCF models inside (default is np.array([2, 8]))
+        the degrees of at least two DyCF models inside (default is np.array([2, 8]))
     dycf_kwargs:
         see DyCF args others than d
 
-#### Sliding MKDE
+#### Distance-based methods
 
-Multivariate Kernel Density Estimation with Sliding Windows
+##### DBOKDE
 
-    Attributes
-    ----------
-    threshold: float
-        the threshold on the pdf, if the pdf at a point is greater than the threshold then the point is considered normal
-    win_size: int
-        size of the window of kernel centers to keep in memory
-    kernel: str, optional
-        the type of kernel to use (default is "gaussian")
-    bandwidth: str, optional
-        rule of thumb to compute the bandwidth (default is "scott")
-
-#### OSCOD
-
-One-Shot COD
+Distance-Based Outliers by Kernel Density Estimation
 
     Attributes
     ----------
     k: int
         a threshold on the number of neighbours needed to consider the point as normal
-    R: float
-        the distance defining the neighborhood around a point
+    R: float or str
+        the distance defining the neighborhood around a point, can be computed dynamically, in this case set R="dynamic"
     win_size: int
-        number of points in the sliding window used in neighbours count
-    M: int (optional)
-        max size of a node in the M-tree containing all points
+        the number of points in the sliding window used in neighbours count
+    sample_size: int
+        the number of points used as kernel centers for the KDE, if sample_size=-1 then sample_size is set to win_size (default is -1)
 
-#### iLOF
+##### DBOECF
 
-Incremental Local Outlier Factor
+Distance-Based Outliers by Empirical Christoffel Function
 
     Attributes
     ----------
-    k: int
-        the number of neighbors to compute the LOF score on
     threshold: float
-        a threshold on the LOF score to separate normal points and outliers
+        a threshold on the "unknownly ratioed" number of neighbours needed to consider the point as normal
+    R: float
+        the distance defining the neighborhood around a point
+    d: int
+        the degree for the ECF
+    N_sample: int, optional
+        number of samples used to estimate the Christoffel function's integral (default is 100)
+    incr_opt: str, optional
+        whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
+    polynomial_basis: str, optional
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre", 
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
+
+#### Density-based methods
+
+##### MDEFKDE
+
+Multi-granularity DEviation Factor estimated with Kernel Density Estimation
+
+    Attributes
+    ----------
+    k_sigma: float
+        a threshold on the MDEF score: MDEF > k_sigma * sigmaMDEF (standard deviation of local MDEF) is an outlier (3 is often used)
+    R: float
+        the distance defining the neighborhood around a point
+    alpha: int (alpha>1)
+        a parameter for the second radius of neighborhood, defined as a 1/(2**alpha) * R neighborhood
     win_size: int
-        number of points in the sliding window used in kNN search
-    min_size: int (optional)
-        minimal number of points in a node, it is mandatory that 2 <= min_size <= max_size / 2 (default is 3)
-    max_size: int (optional)
-        maximal number of points in a node, it is mandatory that 2 <= min_size <= max_size / 2 (default is 12)
-    p_reinsert_tol: int (optional)
-        tolerance on reinsertion, used to deal with overflow in a node (default is 4)
-    reinsert_strategy: str (optional)
-        either "close" or "far", tells if we try to reinsert in the closest rectangles first on in the farthest (default is "close")
+        the number of points in the sliding window used in neighbours count
+    sample_size: int, optional
+        the number of points used as kernel centers for the KDE, if sample_size=-1 then sample_size is set to win_size (default is -1)
 
+##### MDEFECF
 
-### How to implement new outlier detection methods
+Multi-granularity DEviation Factor estimated with Empirical Christoffel Function
 
-We strongly advise that new outlier detection methods implement the BaseDetector abstract class.
+    Attributes
+    ----------
+    k_sigma: float
+        a threshold on the MDEF score: MDEF > k_sigma * sigmaMDEF (standard deviation of local MDEF) is an outlier (3 is often used)
+    R: float
+        the distance defining the neighborhood around a point
+    alpha: int (alpha>1)
+        a parameter for the second radius of neighborhood, defined as a 1/(2**alpha) * R neighborhood
+    d: int
+        the degree for the ECF
+    incr_opt: str, optional
+        whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
+    polynomial_basis: str, optional
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre", 
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
 
-The different methods of the abstract class that need to be implemented are the following:
+### How to use outlier detection methods
+
+The outlier detection methods implement the BaseDetector abstract class with the following methods:
 
     Methods
     -------
@@ -145,16 +195,18 @@ The different methods of the abstract class that need to be implemented are the 
         Computes decision_function of each sample and then update the model with this sample.
     predict_update(x)
         Same as eval_update(x) but returns the prediction instead of the decision function.
-    method_name(x)
+    method_name()
         Returns the name of the method.
-    copy(x) (optional)
+    save_model()
+        Returns a dict of all the model attributes allowing to save the model in bases such as mongodb.
+    load_model(model_dict)
+        Reload a previously saved model based on the output of the save_model() method.
+    copy()
         Returns a copy of the model.
 
-### How to compare on new datasets
+### How to compare methods on labelled datasets
 
-New datasets can be added in the resource folder ```res```. 
-
-Those datasets need to be csv files with a first line as header, a first column as indexes, following columns as variables and a last one as labels (1 for inliers and -1 for outliers).
+Datasets need to be csv files with a first line as header, a first column as indexes, following columns as variables and a last one as labels (1 for inliers and -1 for outliers).
 
 For instance, a dataset containing two instances:
 * the vector ```[0, 0]``` being an inlier,
@@ -169,7 +221,7 @@ could be written as:
 
 #### Define methods and parameterizations
 
-Methods used for evaluation should be defined in ```scripts/evaluating_methods.py``` or in a similar script in a ```METHOD``` variable as a list of dictionaries.
+Methods used for evaluation should be defined following the example in ```scripts/evaluating_methods_example.py``` in a ```METHOD``` variable as a list of dictionaries.
 
 The dictionaries elements contain the following fields:
 * name: complete name to give the method,
@@ -185,15 +237,15 @@ In order to do this, it is recommended to first define the split position as ```
 
 Then, load the dataset into a ```data``` variable calling ```utils.load_dataset``` method with the path to the dataset (theoretically, it should be ```../res/dataset_name.csv```).
 
-And call 
+Finally, you just need to set the dataset into ```data_dict``` as in the following example (note that each dataset in data_dict need a different name):
+
 ```python
+from odds.utils import load_dataset, split_data
+data = load_dataset("path/to/file.csv")
+split_pos = len(data) // 2  # for instance, if you want to split the dataset in two almost equal parts
 x_train, y_train, x_test, y_test = split_data(data, split_pos)
-``` 
-with ```utils.split_data```.
 
-Finally, you just need to set the dataset into ```data_dict``` according to the following example:
-
-```python
+data_dict = dict()
 data_dict["dataset_name"] = {
     "x_test": x_test,
     "x_train": x_train,
@@ -206,8 +258,15 @@ data_dict["dataset_name"] = {
 You just have to call ```utils.compute_and_save``` and ```utils.plot_and_save_results``` with the variables defined earlier:
 
 ```python
-compute_and_save(METHODS, data_dict, "evaluating_methods")
-plot_and_save_results(METHODS, data_dict, "evaluating_methods")
+from odds.utils import compute_and_save, plot_and_save_results
+METHODS = [
+    # list of methods dicts as explained in "Define methods and parameterizations" section
+]
+data_dict = {
+    # datasets as explained in "Set the datasets" section
+}
+compute_and_save(METHODS, data_dict, "/path/to/res")  # here "/path/to/res" is used as a header for the files containing pickle models
+plot_and_save_results(METHODS, data_dict, "/path/to/res")  # here "/path/to/res" is used as a header for the files containing graphs and metrics
 ```
 
-This will generate the resulting files in the ```scripts``` folder. The pickle files save the results in order to avoid computing the model again each time. If you want to recompute a model, the associated pickle file has to be deleted manually. One csv file is generated for each dataset, containing the results for each method. One png file is generated, showing the results in a plot.
+This will generate the resulting files in the ```/path/to``` folder. The pickle files save the results in order to avoid computing the model again each time. If you want to recompute a model, the associated pickle file has to be deleted manually. One csv file is generated for each dataset, containing the results for each method. One png file is generated, showing the results in a plot.

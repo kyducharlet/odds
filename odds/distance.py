@@ -2,93 +2,9 @@ from typing import Union
 import numpy as np
 
 from .base import BaseDetector
-from .utils import MTree
 from .utils import IMPLEMENTED_BANDWIDTH_ESTIMATORS, neighbours_count
 from .utils import MomentsMatrix, update_params, compute_R
 from tqdm import trange
-
-
-class OSCOD(BaseDetector):
-    """
-    One-Shot COD
-
-    Attributes
-    ----------
-    k: int
-        a threshold on the number of neighbours needed to consider the point as normal
-    R: float
-        the distance defining the neighborhood around a point
-    win_size: int
-        number of points in the sliding window used in neighbours count
-    M: int (optional)
-        max size of a node in the M-tree containing all points
-
-    Methods
-    -------
-    See BaseDetector methods
-    """
-
-    def __init__(self, k: int, R: float, win_size: int, M: int = 5):
-        self.p = None
-        self.k = k
-        self.R = R
-        self.win_size = win_size
-        self.M = M
-        self.mt = MTree(M, R)
-        self.__offset__ = 1 / (1 + k)
-
-    def fit(self, x):
-        self.assert_shape_unfitted(x)
-        self.p = x.shape[1]
-        for xx in x[-self.win_size:]:
-            self.mt.insert_data(xx)
-        return self
-
-    def update(self, x):
-        self.assert_shape_fitted(x)
-        for xx in x[-self.win_size:]:
-            # Removal
-            self.mt.remove_oldest()
-            # Insertion
-            self.mt.insert_data(xx)
-        return self
-
-    def score_samples(self, x):
-        self.assert_shape_fitted(x)
-        res = np.zeros(x.shape[0])
-        for i, xx in enumerate(x):
-            res[i] = self.mt.score_point(xx)
-        return 1 / (1 + res)
-
-    def decision_function(self, x):
-        self.assert_shape_fitted(x)
-        return self.__offset__ - self.score_samples(x)
-
-    def predict(self, x):
-        self.assert_shape_fitted(x)
-        return np.where(self.decision_function(x) < 0, -1, 1)
-
-    def predict_update(self, x):
-        self.assert_shape_fitted(x)
-        preds = np.zeros(len(x))
-        for i, xx in enumerate(x):
-            preds[i] = self.predict(xx.reshape(1, -1))
-            self.update(xx.reshape(1, -1))
-        return preds
-
-    def eval_update(self, x):
-        self.assert_shape_fitted(x)
-        evals = np.zeros(len(x))
-        for i, xx in enumerate(x):
-            evals[i] = self.decision_function(xx.reshape(1, -1))
-            self.update(xx.reshape(1, -1))
-        return evals
-
-    def copy(self):
-        raise NotImplementedError("The copy method for OSCOD has not been implemented yet.")
-
-    def method_name(self):
-        return "One-Shot COD"
 
 
 class DBOKDE(BaseDetector):
@@ -99,26 +15,26 @@ class DBOKDE(BaseDetector):
     ----------
     k: int
         a threshold on the number of neighbours needed to consider the point as normal
-    R: float
-        the distance defining the neighborhood around a point
-    sample_size: int
-        the number of points used as kernel centers for the KDE
+    R: float or str
+        the distance defining the neighborhood around a point, can be computed dynamically, in this case set R="dynamic"
     win_size: int
         the number of points in the sliding window used in neighbours count
+    sample_size: int, optional
+        the number of points used as kernel centers for the KDE, if sample_size=-1 then sample_size is set to win_size (default is -1)
 
     Methods
     -------
     See BaseDetector methods
     """
-    def __init__(self,  k: int, R: Union[float, str], sample_size: int, win_size: int):
+    def __init__(self,  k: int, R: Union[float, str], win_size: int, sample_size: int = -1):
         assert sample_size <= win_size
         assert sample_size > 0
         self.k = k
         self.__offset__ = 1 / (1 + k)
         self.R = R if R != "dynamic" else None
         self.R_strategy = R if R == "dynamic" else None
-        self.sample_size = sample_size
         self.win_size = win_size
+        self.sample_size = win_size if sample_size == -1 else sample_size
         self.be = IMPLEMENTED_BANDWIDTH_ESTIMATORS["scott"] if self.R_strategy is None else IMPLEMENTED_BANDWIDTH_ESTIMATORS["scott_with_R"]
         self.points = None  # kernel centers
         self.rd_s = None # random sample
@@ -179,6 +95,12 @@ class DBOKDE(BaseDetector):
             self.update(x[i].reshape(1, -1))
         return preds
 
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
+
     def copy(self):
         model_bis = DBOKDE(self.k, self.R, self.sample_size, self.win_size)
         model_bis.__offset__ = self.__offset__
@@ -205,10 +127,13 @@ class DBOECF(BaseDetector):
         the distance defining the neighborhood around a point
     d: int
         the degree for the ECF
+    N_sample: int, optional
+        number of samples used to estimate the Christoffel function's integral (default is 100)
     incr_opt: str, optional
         whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
     polynomial_basis: str, optional
-        whether "monomials" to use the monomials basis, "legendre" to use the Legendre polynomials or "chebyshev" to use the Chebyshev polynomials (default is "monomials")
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre",
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
 
     Methods
     -------
@@ -289,6 +214,12 @@ class DBOECF(BaseDetector):
     def predict_update(self, x):
         evals = self.eval_update(x)
         return np.where(evals < 0, -1, 1)
+
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
 
     def copy(self):
         raise NotImplementedError("Not implemented yet for DBOECF.")

@@ -1,8 +1,8 @@
-from .base import BaseDetector
-from .utils import np
-from .utils import IMPLEMENTED_KERNEL_FUNCTIONS, IMPLEMENTED_BANDWIDTH_ESTIMATORS
-from .utils import MomentsMatrix
-from .utils import SDEM, IMPLEMENTED_SS_SCORING_FUNCTIONS
+from odds.base import BaseDetector
+from odds.utils import np
+from odds.utils import IMPLEMENTED_KERNEL_FUNCTIONS, IMPLEMENTED_BANDWIDTH_ESTIMATORS
+from odds.utils import MomentsMatrix
+from odds.utils import SDEM, IMPLEMENTED_SS_SCORING_FUNCTIONS
 from math import comb
 
 
@@ -88,6 +88,21 @@ class KDE(BaseDetector):
             self.update(x[i].reshape(1, -1))
         return preds
 
+    def save_model(self):
+        return {
+            "p": self.p,
+            "kc": self.kc.tolist(),
+            "bsi": self.bsi.tolist(),
+            "bdsi": self.bdsi,
+        }
+
+    def load_model(self, model_dict: dict):
+        self.p = model_dict["p"]
+        self.kc = np.array(model_dict["kc"])
+        self.bsi = np.array(model_dict["bsi"])
+        self.bdsi = model_dict["bdsi"]
+        return self
+
     def copy(self):
         model_bis = KDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
         model_bis.kc = self.kc
@@ -100,7 +115,49 @@ class KDE(BaseDetector):
         return "KDE"
 
 
+class ImprovedKDE(KDE):
+    def fit(self, x: np.ndarray, contamination: float = 0):
+        assert 0 <= contamination < 1
+        self.assert_shape_unfitted(x)
+        self.kc = x[-self.win_size:]
+        self.p = x.shape[1]
+        self.bsi, self.bdsi = self.be(self.kc)
+        training_scores = (1 / self.score_samples(x)) - 1
+        self.threshold = -1 * np.percentile(- training_scores, 100 * (1 - contamination))
+        return self
+
+    def copy(self):
+        model_bis = ImprovedKDE(self.threshold, self.win_size, self.kernel, self.bandwidth)
+        model_bis.kc = self.kc
+        model_bis.bsi = self.bsi
+        model_bis.bdsi = self.bdsi
+        model_bis.p = self.p
+        return model_bis
+
+
 class SmartSifter(BaseDetector):
+    """
+    Smart Sifter reduced to continuous domain only with its Sequentially Discounting Expectation and Maximizing (SDEM) algorithm
+    (see https://github.com/sk1010k/SmartSifter and https://scikit-learn.org/stable/modules/generated/sklearn.mixture.GaussianMixture.html)
+
+    Attributes
+    ----------
+    threshold: float
+        the threshold on the pdf, if the pdf computed for a point is greater than the threshold then the point is considered normal
+    k: int
+        number of gaussian mixture components ("n_components" from sklearn.mixture.GaussianMixture)
+    r: float
+        discounting parameter for the SDEM algorithm ("r" from smartsifter.SDEM)
+    alpha: float
+        stability parameter for the weights of gaussian mixture components ("alpha" from smartsifter.SDEM)
+    scoring_function: str
+        scoring function used, either "logloss" for logarithmic loss or "hellinger" for hellinger score, both proposed by the original article,
+        or "likelihood" for the likelihood that a point is issued from the learned mixture (default is "likelihood")
+
+    Methods
+    -------
+    See BaseDetector methods
+    """
     def __init__(self, threshold: float, k: int, r: float, alpha: float, scoring_function: str = "likelihood"):
         assert scoring_function in IMPLEMENTED_SS_SCORING_FUNCTIONS.keys()
         self.r = r
@@ -165,6 +222,12 @@ class SmartSifter(BaseDetector):
         evals = self.eval_update(x)
         return np.where(evals < 0, -1, 1)
 
+    def save_model(self):
+        raise NotImplementedError("Not implemented yet.")
+
+    def load_model(self, model_dict: dict):
+        raise NotImplementedError("Not implemented yet.")
+
     def copy(self):
         raise NotImplementedError("The copy method for SmartSifter has not been implemented yet.")
 
@@ -179,26 +242,32 @@ class DyCF(BaseDetector):
     Attributes
     ----------
     d: int
-        the degree of polynomials
+        the degree of polynomials, usually set between 2 and 8
     incr_opt: str, optional
-        whether "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
+        can be either "inverse" to inverse the moments matrix each iteration or "sherman" to use the Sherman-Morrison formula (default is "inv")
     polynomial_basis: str, optional
-        whether "monomials" to use the monomials basis or "chebyshev" to use the Chebyshev polynomials (default is "monomials")
+        polynomial basis used to compute moment matrix, either "monomials", "chebyshev_t_1", "chebyshev_t_2", "chebyshev_u" or "legendre",
+        varying this parameter can bring stability to the score in some cases (default is "monomials")
     regularization: str, optional
-        one of "vu" (score divided by d^{3p/2}) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu")
+        one of "vu" (score divided by d^{3p/2}), "vu_C" (score divided by d^{3p/2}/C), "comb" (score divided by comb(p+d, d)) or "none" (no regularization), "none" is used for cf vs mkde comparison (default is "vu_C")
+    C: float, optional
+        define a threshold on the score when used with regularization="vu_C", usually C<=1 (default is 1)
+    inv: str, optional
+        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "inv")
 
     Methods
     -------
     See BaseDetector methods
     """
 
-    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu", C: float = 1, inv: str = "inv"):
+    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu_C", C: float = 1, inv: str = "inv"):
         self.N = 0  # number of points integrated in the moments matrix
         self.C = C
         self.p = None
         self.d = d
         self.moments_matrix = MomentsMatrix(d, incr_opt=incr_opt, polynomial_basis=polynomial_basis, inv_opt=inv)
         self.regularization = regularization
+        self.regularizer = None
 
     def fit(self, x: np.ndarray):
         self.assert_shape_unfitted(x)
@@ -206,13 +275,13 @@ class DyCF(BaseDetector):
         self.p = x.shape[1]
         self.moments_matrix.fit(x)
         if self.regularization == "vu":
-            self.__dict__["regularizer"] = self.d ** (3 * self.p / 2)
+            self.regularizer = self.d ** (3 * self.p / 2)
         elif self.regularization == "vu_C":
-            self.__dict__["regularizer"] = (self.d ** (3 * self.p / 2)) / self.C
+            self.regularizer = (self.d ** (3 * self.p / 2)) / self.C
         elif self.regularization == "comb":
-            self.__dict__["regularizer"] = comb(self.d + x.shape[1], x.shape[1])
+            self.regularizer = comb(self.d + x.shape[1], x.shape[1])
         else:
-            self.__dict__["regularizer"] = 1
+            self.regularizer = 1
         return self
 
     def update(self, x):
@@ -223,7 +292,7 @@ class DyCF(BaseDetector):
 
     def score_samples(self, x):
         self.assert_shape_fitted(x)
-        return self.moments_matrix.score_samples(x.reshape(-1, self.p)) / self.__dict__["regularizer"]
+        return self.moments_matrix.score_samples(x.reshape(-1, self.p)) / self.regularizer
 
     def decision_function(self, x):
         self.assert_shape_fitted(x)
@@ -256,28 +325,119 @@ class DyCF(BaseDetector):
             self.update(xx.reshape(-1, self.p))
         return preds
 
+    def save_model(self):
+        return {
+            "N": self.N,
+            "p": self.p,
+            "C": self.C,
+            "regularization": self.regularization,
+            "regularizer": self.regularizer,
+            "moments_matrix": self.moments_matrix.save_model()
+        }
+
+    def load_model(self, model_dict: dict):
+        self.N = model_dict["N"]
+        self.p = model_dict["p"]
+        self.C = model_dict["C"]
+        self.regularization = model_dict["regularization"]
+        self.regularizer = model_dict["regularizer"]
+        self.moments_matrix = self.moments_matrix.load_model(model_dict["moments_matrix"])
+
     def copy(self):
-        c_bis = DyCF(d=self.d)
+        c_bis = DyCF(d=self.d, regularization=self.regularization)
         c_bis.moments_matrix = self.moments_matrix.copy()
         c_bis.N = self.N
         if self.p is not None:
             c_bis.p = self.p
-        if self.__dict__.get("regularizer") is not None:
-            c_bis.__dict__["regularizer"] = self.__dict__["regularizer"]
+        if self.regularizer is not None:
+            c_bis.regularizer = self.regularizer
         return c_bis
 
     def method_name(self):
         return "DyCF"
 
 
+class ImprovedDyCF(DyCF):
+    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu_C", C: float = 1, inv: str = "inv"):
+        super().__init__(d, incr_opt, polynomial_basis, regularization, C, inv)
+        self.std = None
+        self.mean = None
+
+    def fit(self, x: np.ndarray, contamination: float = 0):
+        assert 0 <= contamination < 1
+        self.assert_shape_unfitted(x)
+        self.N = x.shape[0]
+        self.p = x.shape[1]
+        self.std = np.std(x, axis=0)
+        self.mean = np.mean(x, axis=0)
+        standardized_x = (x - self.mean) / self.std
+        self.moments_matrix.fit(standardized_x)
+        if self.regularization == "vu":
+            self.regularizer = self.d ** (3 * self.p / 2)
+        elif self.regularization == "vu_C":
+            self.regularizer = self.d ** (3 * self.p / 2)
+            training_scores = self.score_samples(x)
+            self.C = 1 / np.percentile(training_scores, 100 * (1 - contamination))
+            self.regularizer = (self.d ** (3 * self.p / 2)) / self.C
+        elif self.regularization == "comb":
+            self.regularizer = comb(self.d + x.shape[1], x.shape[1])
+        else:
+            self.regularizer = 1
+        return self
+
+    def update(self, x):
+        self.assert_shape_fitted(x)
+        standardized_x = (x - self.mean) / self.std
+        self.moments_matrix.update(standardized_x, self.N)
+        self.N += x.shape[0]
+        return self
+
+    def score_samples(self, x):
+        self.assert_shape_fitted(x)
+        standardized_x = (x - self.mean) / self.std
+        return self.moments_matrix.score_samples(standardized_x.reshape(-1, self.p)) / self.regularizer
+
+    def save_model(self):
+        return {
+            "N": self.N,
+            "p": self.p,
+            "C": self.C,
+            "mean": self.mean.tolist(),
+            "std": self.std.tolist(),
+            "regularization": self.regularization,
+            "regularizer": self.regularizer,
+            "moments_matrix": self.moments_matrix.save_model()
+        }
+
+    def load_model(self, model_dict: dict):
+        self.N = model_dict["N"]
+        self.p = model_dict["p"]
+        self.C = model_dict["C"]
+        self.mean = np.array(model_dict["mean"])
+        self.std = np.array(model_dict["std"])
+        self.regularization = model_dict["regularization"]
+        self.regularizer = model_dict["regularizer"]
+        self.moments_matrix = self.moments_matrix.load_model(model_dict["moments_matrix"])
+
+    def copy(self):
+        c_bis = ImprovedDyCF(d=self.d, C=self.C, regularization=self.regularization)
+        c_bis.moments_matrix = self.moments_matrix.copy()
+        c_bis.N = self.N
+        if self.p is not None:
+            c_bis.p = self.p
+        if self.regularizer is not None:
+            c_bis.regularizer = self.regularizer
+        return c_bis
+
+
 class DyCG(BaseDetector):
     """
-    Dynamical Christoffel Function
+    Dynamical Christoffel Growth
 
     Attributes
     ----------
     degrees: ndarray, optional
-        the degrees of two DyCF models inside (default is np.array([2, 8]))
+        the degrees of at least two DyCF models inside (default is np.array([2, 8]))
     dycf_kwargs:
         see DyCF args others than d
 
@@ -341,6 +501,22 @@ class DyCG(BaseDetector):
             self.update(d_)
         return preds
 
+    def save_model(self):
+        return {
+            "degrees": self.degrees.tolist(),
+            "p": self.p,
+            "models": [
+                dycf_model.save_model() for dycf_model in self.models
+            ]
+        }
+
+    def load_model(self, model_dict: dict):
+        self.degrees = np.array(model_dict["degrees"])
+        self.p = model_dict["p"]
+        for (i, dycf_model_dict) in enumerate(model_dict["models"]):
+            self.models[i].load_model(dycf_model_dict)
+        return self
+
     def copy(self):
         mc_bis = DyCG(degrees=self.degrees)
         mc_bis.models = [model.copy() for model in self.models]
@@ -348,3 +524,63 @@ class DyCG(BaseDetector):
 
     def method_name(self):
         return "DyCG"
+
+
+class ImprovedDyCG(DyCG):
+    def __init__(self, degrees: np.ndarray = np.array([2, 8]), **dycf_kwargs):
+        super().__init__(degrees, **dycf_kwargs)
+        self.std = None
+        self.mean = None
+
+    def fit(self, x):
+        self.assert_shape_unfitted(x)
+        self.p = x.shape[1]
+        self.std = np.std(x, axis=0)
+        self.mean = np.mean(x, axis=0)
+        standardized_x = (x - self.mean) / self.std
+        for model in self.models:
+            model.fit(standardized_x)
+        return self
+
+    def update(self, x: np.ndarray):
+        self.assert_shape_fitted(x)
+        standardized_x = (x - self.mean) / self.std
+        for model in self.models:
+            model.update(standardized_x)
+        return self
+
+    def score_samples(self, x):
+        self.assert_shape_fitted(x)
+        score = np.zeros((len(x), 1))
+        standardized_x = (x - self.mean) / self.std
+        for i, d in enumerate(standardized_x):
+            d_ = d.reshape(1, -1)
+            scores = np.array([m.score_samples(d_)[0] for m in self.models])
+            s_diff = np.diff(scores) / np.diff(self.degrees)
+            score[i] = np.mean(s_diff)
+        return score
+
+    def save_model(self):
+        return {
+            "degrees": self.degrees.tolist(),
+            "p": self.p,
+            "mean": self.mean.tolist(),
+            "std": self.std.tolist(),
+            "models": [
+                dycf_model.save_model() for dycf_model in self.models
+            ]
+        }
+
+    def load_model(self, model_dict: dict):
+        self.degrees = np.array(model_dict["degrees"])
+        self.p = model_dict["p"]
+        self.mean = np.array(model_dict["mean"])
+        self.std = np.array(model_dict["std"])
+        for (i, dycf_model_dict) in enumerate(model_dict["models"]):
+            self.models[i].load_model(dycf_model_dict)
+        return self
+
+    def copy(self):
+        mc_bis = ImprovedDyCG(degrees=self.degrees)
+        mc_bis.models = [model.copy() for model in self.models]
+        return mc_bis
