@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import inv, pinv, solve, lapack
 from scipy.integrate import nquad, trapezoid
-from pyfaust.fact import eigtj
 from math import comb, factorial
 import itertools
 import pickle
@@ -212,11 +211,6 @@ IMPLEMENTED_INCREMENTATION_OPTIONS = {
 """ DyCF: Matrix inversion options """
 
 
-def faust_inv(M):
-    D, U = eigtj(M, nGivens=5*M.shape[0], enable_large_Faust=True)
-    return U @ np.diag(1 / D) @ U.T
-
-
 def pd_inv(M):  # according to: https://stackoverflow.com/a/40709871
     n = M.shape[0]
     I = np.identity(n)
@@ -247,7 +241,6 @@ def fpd_inv(M):  # according to: https://stackoverflow.com/a/58719188
 IMPLEMENTED_INVERSION_OPTIONS = {
     "inv": inv,
     "pinv": pinv,
-    "faust_inv": faust_inv,
     "pd_inv": pd_inv,
     "fpd_inv": fpd_inv,
 }
