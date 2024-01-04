@@ -46,7 +46,7 @@ IMPLEMENTED_KERNEL_FUNCTIONS = {
 
 
 def scott_rule(x):
-    ev = np.sqrt(5) * np.maximum(np.std(x, axis=0), 1e-32 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
+    ev = np.sqrt(5) * np.maximum(np.std(x, axis=0), 1e-9 * np.ones(x.shape[1])) / np.power(x.shape[0], 1 / (x.shape[1] + 4))
     return np.diag(1 / ev), np.prod(1 / ev)
 
 
