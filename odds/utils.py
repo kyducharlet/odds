@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.linalg import inv, pinv, solve, lapack
-from scipy.integrate import nquad, trapezoid
+from scipy.integrate import nquad
 from math import comb, factorial
 import itertools
 import pickle
@@ -10,7 +10,7 @@ from multiprocessing import Pool
 from pympler import asizeof
 import time
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_auc_score, precision_score
+from sklearn.metrics import auc
 from sklearn.base import clone
 from smartsifter import SDEM
 import warnings
@@ -22,13 +22,8 @@ inds_cache = {}
 """ KDE: Kernel functions """
 
 
-"""def gaussian_kernel(x, kc, bsi, bdsi):
-    value = np.dot(bsi, (kc - x).T).T
-    return np.array([bdsi * np.exp(-1 * np.dot(elt.reshape(1, -1), elt.reshape(-1, 1))[0, 0] / 2) / np.power(np.sqrt(2 * np.pi), elt.shape[0]) for elt in value])"""
-
-
 def gaussian_kernel(x, kc, bsi, bdsi):
-    return np.array([np.sqrt(bdsi) * np.exp(-1 * np.dot(np.dot(elt.reshape(1, -1), bsi), elt.reshape(-1, 1))[0, 0] / 2) / np.power(np.sqrt(2 * np.pi), elt.shape[0]) for elt in x - kc])
+    return np.sqrt(bdsi) * np.exp(-1 * np.diagonal(((x - kc) @ bsi @ (x - kc).T)) / 2) / np.power(np.sqrt(2 * np.pi), kc.shape[1] / 2)
 
 
 def epanechnikov_kernel(x, kc, bsi, bdsi):
@@ -86,6 +81,54 @@ def neighbours_counts_in_grid(x, kcs, bsi, bdsi, ws, ss, m, r):
         overlapping_kc = [kc for kc in kcs if (np.abs(kc - center) < (1 / np.diagonal(bsi)) + r).all()]
         counts.append(neighbours_count(center, overlapping_kc, bsi, bdsi, ws, ss, r))
     return np.array(counts)
+
+
+""" SmartSifter: SDEM with copy """
+
+
+class SDEM_(SDEM):
+    def __init__(self, r, alpha, **kwargs):
+        super().__init__(r, alpha, **kwargs)
+
+    def copy(self):
+        sdem_bis = SDEM_(self.r, self.alpha)
+        if self.__dict__.get("converged_") is not None:
+            sdem_bis.converged_ = self.converged_
+        sdem_bis.covariance_type = self.covariance_type
+        if self.__dict__.get("convariances_") is not None:
+            sdem_bis.covariances_ = self.covariances_
+        if self.__dict__.get("convariances_bar") is not None:
+            sdem_bis.covariances_bar = self.covariances_bar
+        sdem_bis.init_params = self.init_params
+        if self.__dict__.get("lower_bound_") is not None:
+            sdem_bis.lower_bound_ = self.lower_bound_
+        sdem_bis.max_iter = self.max_iter
+        if self.__dict__.get("means_") is not None:
+            sdem_bis.means_ = self.means_
+        if self.__dict__.get("means_bar") is not None:
+            sdem_bis.means_bar = self.means_bar
+        sdem_bis.means_init = self.means_init
+        sdem_bis.n_components = self.n_components
+        if self.__dict__.get("n_features_in_") is not None:
+            sdem_bis.n_features_in_ = self.n_features_in_
+        sdem_bis.n_init = self.n_init
+        if self.__dict__.get("n_iter_") is not None:
+            sdem_bis.n_iter_ = self.n_iter_
+        if self.__dict__.get("precisions_") is not None:
+            sdem_bis.precisions_ = self.precisions_
+        if self.__dict__.get("precisions_cholesky_") is not None:
+            sdem_bis.precisions_cholesky_ = self.precisions_cholesky_
+        sdem_bis.precisions_init = self.precisions_init
+        sdem_bis.random_state = self.random_state
+        sdem_bis.reg_covar = self.reg_covar
+        sdem_bis.tol = self.tol
+        sdem_bis.verbose = self.verbose
+        sdem_bis.verbose_interval = self.verbose_interval
+        sdem_bis.warm_start = self.warm_start
+        if self.__dict__.get("weights_") is not None:
+            sdem_bis.weights_ = self.weights_
+        sdem_bis.weights_init = self.weights_init
+        return sdem_bis
 
 
 """ SmartSifter: Scoring functions """
@@ -557,25 +600,38 @@ def montecarlo_integrate(f, x, N, p, R):
 
 def average_precision_score(y_true, y_score):
     score_outliers = y_score[y_true == -1]
-    precision_scores = [len(score_outliers[score_outliers < threshold]) / len(y_score[y_score < threshold]) if len(y_score[y_score < threshold]) != 0 else 1 for threshold in score_outliers]
+    if len(score_outliers) == 0:
+        return np.nan
+    precision_scores = [precision(y_score, score_outliers, threshold) for threshold in score_outliers]
     return np.mean(precision_scores)
 
 
 def roc_auc_score(y_true, y_score):
-    tpr, fpr, thresholds = roc_curve(y_true, y_score)
-    return trapezoid(tpr, fpr)
+    res = roc_curve(y_true, y_score)
+    if res is None:
+        return np.nan
+    else:
+        tpr, fpr, thresholds = res
+    return auc(x=fpr, y=tpr)
 
 
-def roc_curve(y_true, y_score):
+def roc_curve(y_true: np.ndarray, y_score: np.ndarray):
     score_outliers = y_score[y_true == -1]
+    if len(score_outliers) == 0:
+        return None
     score_inliers = y_score[y_true != -1]
-    thresholds = np.concatenate(([np.min(y_score)], np.unique(score_outliers), [np.max(y_score)]))
+    thresholds = np.unique(np.concatenate((np.array([np.min(y_score)]), score_outliers, np.array([np.max(y_score)]))))
     tpr = np.array([len(score_outliers[score_outliers < s]) / len(score_outliers) for s in thresholds])
     fpr = np.array([len(score_inliers[score_inliers < s]) / len(score_inliers) for s in thresholds])
     return tpr, fpr, thresholds
 
 
-def roc_and_pr_curve(y_true, y_score):
+def precision(y_score, score_outliers, threshold):
+    # len(y_score[y_score < threshold]) = 0 => there is no positives detected, which mean that the precision (how many positives are true positives) is max
+    return len(score_outliers[score_outliers < threshold]) / len(y_score[y_score < threshold]) if len(y_score[y_score < threshold]) != 0 else 1
+
+
+def roc_and_pr_curves(y_true, y_score):
     score_outliers = y_score[y_true == -1]
     score_inliers = y_score[y_true != -1]
     thresholds = np.concatenate(([np.min(y_score)], np.unique(score_outliers), [np.max(y_score)]))
@@ -594,3 +650,36 @@ def supervised_metrics(y_true, y_pred):
     accuracy = (recall + specificity) / 2
     f_score = 2 * recall * precision / (recall + precision) if recall + precision != 0 else 0
     return recall, specificity, precision, accuracy, f_score
+
+
+def em_goix(t, t_max, volume_support, s_unif, s_X, n_generated):
+    EM_t = np.zeros(t.shape[0])
+    n_samples = s_X.shape[0]
+    s_X_unique = np.unique(s_X)
+    EM_t[0] = 1.
+    for u in s_X_unique:
+        # if (s_unif >= u).sum() > n_generated / 1000:
+        EM_t = np.maximum(EM_t, 1. / n_samples * (s_X > u).sum() -
+                          t * (s_unif > u).sum() / n_generated
+                          * volume_support)
+    amax = np.argmax(EM_t <= t_max) + 1
+    if amax == 1:
+        print('\n failed to achieve t_max \n')
+        amax = -1
+    return t, EM_t, auc(x=t[:amax], y=EM_t[:amax]), amax
+
+
+def mv_goix(axis_alpha, volume_support, s_unif, s_X, n_generated):
+    n_samples = s_X.shape[0]
+    s_X_argsort = s_X.argsort()
+    mass = 0
+    cpt = 0
+    u = s_X[s_X_argsort[-1]]
+    mv = np.zeros(axis_alpha.shape[0])
+    for i in range(axis_alpha.shape[0]):
+        while mass < axis_alpha[i]:
+            cpt += 1
+            u = s_X[s_X_argsort[-cpt]]
+            mass = 1. / n_samples * cpt  # sum(s_X > u)
+        mv[i] = float((s_unif >= u).sum()) / n_generated * volume_support
+    return axis_alpha, mv, auc(x=axis_alpha, y=mv)
