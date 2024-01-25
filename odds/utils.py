@@ -652,7 +652,7 @@ def supervised_metrics(y_true, y_pred):
     return recall, specificity, precision, accuracy, f_score
 
 
-def em_goix(t, t_max, volume_support, s_unif, s_X, n_generated):
+def em_auc_score(t, t_max, volume_support, s_unif, s_X, n_generated):
     EM_t = np.zeros(t.shape[0])
     n_samples = s_X.shape[0]
     s_X_unique = np.unique(s_X)
@@ -669,7 +669,7 @@ def em_goix(t, t_max, volume_support, s_unif, s_X, n_generated):
     return t, EM_t, auc(x=t[:amax], y=EM_t[:amax]), amax
 
 
-def mv_goix(axis_alpha, volume_support, s_unif, s_X, n_generated):
+def mv_auc_score(axis_alpha, volume_support, s_unif, s_X, n_generated):
     n_samples = s_X.shape[0]
     s_X_argsort = s_X.argsort()
     mass = 0
