@@ -478,10 +478,17 @@ class ILOF(BaseDetector):
         for o in S_update_lrd:
             o.__dict__["__lrd__"] = 1 / np.mean(o.__dict__["__rds__"])
 
+    def save_model(self):
+        pass
+
+    def load_model(self, model_dict: dict):
+        pass
+
     def copy(self):
         ilof_bis = ILOF(self.k, self.threshold, self.win_size)
         ilof_bis.rst = self.rst.copy()
         ilof_bis.p = self.p
+        return ilof_bis
 
     def method_name(self):
         return "ILOF"
