@@ -27,14 +27,14 @@ class DBOKDE(BaseDetector):
     See BaseDetector methods
     """
     def __init__(self,  k: int, R: Union[float, str], win_size: int, sample_size: int = -1):
-        assert sample_size <= win_size
-        assert sample_size > 0
+        self.win_size = win_size
+        self.sample_size = win_size if sample_size == -1 else sample_size
+        assert self.sample_size <= self.win_size
+        assert self.sample_size > 0
         self.k = k
         self.__offset__ = 1 / (1 + k)
         self.R = R if R != "dynamic" else None
         self.R_strategy = R if R == "dynamic" else None
-        self.win_size = win_size
-        self.sample_size = win_size if sample_size == -1 else sample_size
         self.be = IMPLEMENTED_BANDWIDTH_ESTIMATORS["scott"] if self.R_strategy is None else IMPLEMENTED_BANDWIDTH_ESTIMATORS["scott_with_R"]
         self.points = None  # kernel centers
         self.rd_s = None # random sample
@@ -110,6 +110,7 @@ class DBOKDE(BaseDetector):
         model_bis.bsi = self.bsi
         model_bis.bdsi = self.bdsi
         model_bis.p = self.p
+        return model_bis
 
     def method_name(self):
         return "DBO with KDE"

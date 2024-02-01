@@ -454,14 +454,14 @@ class RStarTreeObject:
 
 
 class RStarTreeNode:
-    def __init__(self, min_size, max_size, p_reinsert_tol, level, leaf_level, parent=None, reinsert_strategy="close", tree=None):
+    def __init__(self, level, leaf_level, tree, parent):
         self.parent = parent
-        assert 2 <= min_size <= max_size / 2, "It is required that 2 <= min_size <= max_size / 2."
-        self.min_size = min_size
-        self.max_size = max_size
-        self.p = p_reinsert_tol
-        assert reinsert_strategy in ["close", "far"], "'reinsert_strategy' should be either 'close' or 'far'."
-        self.reinsert_strategy = reinsert_strategy
+        assert 2 <= tree.min_size <= tree.max_size / 2, "It is required that 2 <= min_size <= max_size / 2."
+        self.min_size = tree.min_size
+        self.max_size = tree.max_size
+        self.p = tree.p_reinsert_tol
+        assert tree.reinsert_strategy in ["close", "far"], "'reinsert_strategy' should be either 'close' or 'far'."
+        self.reinsert_strategy = tree.reinsert_strategy
         self.level = level
         self.leaf_level = leaf_level
         self.tree = tree
@@ -595,8 +595,7 @@ class RStarTreeNode:
         if self.parent is None:
             new_root = self.tree.__create_new_root__()
             new_root.__insert__(self, new_root.level)
-            self.tree = None
-        new_node = RStarTreeNode(min_size=self.min_size, max_size=self.max_size, p_reinsert_tol=self.p, level=self.level, leaf_level=self.leaf_level, parent=self.parent, reinsert_strategy=self.reinsert_strategy)
+        new_node = RStarTreeNode(level=self.level, leaf_level=self.leaf_level, parent=self.parent, tree=self.tree)
         for r in second_group:
             self.children.remove(r)
             new_node.__insert__(r, level=new_node.level)
@@ -719,15 +718,14 @@ class RStarTreeNode:
         return np.prod(self.high - self.low) < np.prod(other.high - other.low)
 
     def copy(self, levels, index, parent, tree):
-        rstn_bis = RStarTreeNode(self.min_size, self.max_size, self.p, levels[index], parent, self.reinsert_strategy, tree)
-        rstn_bis.leaf_level = levels[-1]
+        rstn_bis = RStarTreeNode(level=levels[index], leaf_level=levels[-1], parent=parent, tree=tree)
         rstn_bis.high = self.high
         rstn_bis.low = self.low
         children_index = index + 1
         if children_index == len(levels):  # the current node is a leaf, and its children are tree objects
-            rstn_bis.children = [c.copy(self) for c in self.children]
+            rstn_bis.children = [c.copy(rstn_bis) for c in self.children]
         else:  # the children are nodes
-            rstn_bis.children = [c.copy(levels, children_index, self, tree) for c in self.children]
+            rstn_bis.children = [c.copy(levels, children_index, rstn_bis, tree) for c in self.children]
         rstn_bis.max_k_dist = self.max_k_dist
         return rstn_bis
 
@@ -754,6 +752,7 @@ class RStarTreeLevel:
     def copy(self):
         level_bis = RStarTreeLevel(self.level)
         level_bis.overflow_treated = self.overflow_treated
+        return level_bis
 
 
 """ ILOF: R*-tree, for kNN search optimization """
@@ -762,8 +761,12 @@ class RStarTreeLevel:
 class RStarTree:
     def __init__(self, k, min_size=3, max_size=12, p_reinsert_tol=4, reinsert_strategy="close"):
         self.k = k
+        self.min_size = min_size
+        self.max_size = max_size
+        self.p_reinsert_tol = p_reinsert_tol
+        self.reinsert_strategy = reinsert_strategy
         self.levels = [RStarTreeLevel(0)]
-        self.root = RStarTreeNode(min_size, max_size, p_reinsert_tol, level=self.levels[0], leaf_level=self.levels[-1], reinsert_strategy=reinsert_strategy, tree=self)
+        self.root = RStarTreeNode(level=self.levels[0], leaf_level=self.levels[-1], tree=self, parent=None)
         self.objects: RSTObjectList = []
 
     def insert_data(self, x):
@@ -838,7 +841,7 @@ class RStarTree:
         for level in self.levels:
             level.increment()
         self.levels.append(RStarTreeLevel(0))
-        self.root = RStarTreeNode(self.root.min_size, self.root.max_size, self.root.p, level=self.levels[-1], leaf_level=self.root.leaf_level, reinsert_strategy=self.root.reinsert_strategy, tree=self)
+        self.root = RStarTreeNode(level=self.levels[-1], leaf_level=self.root.leaf_level, tree=self, parent=None)
         return self.root
 
     def __get_all_objects__(self) -> RSTChildrenList:
@@ -847,11 +850,11 @@ class RStarTree:
         return res
 
     def copy(self):
-        rst_bis = RStarTree(self.k)
+        rst_bis = RStarTree(self.k, self.min_size, self.max_size, self.p_reinsert_tol, self.reinsert_strategy)
         rst_bis.levels = [l.copy() for l in self.levels]
-        rst_bis.root = self.root.copy(rst_bis.levels, 0, None, self)
+        rst_bis.root = self.root.copy(rst_bis.levels, 0, None, rst_bis)
         objects = rst_bis.__get_all_objects__()
-        for o in self.objects:
+        for o in self.objects:  # rst_bis.objects should be in the same order as in self.objects
             for o_ in objects:
                 if np.all(o.low == o_.low) and np.all(o.high == o_.high):
                     rst_bis.objects.append(o_)
