@@ -1,8 +1,8 @@
 from odds.base import BaseDetector
-from odds.utils import np, time
+from odds.utils import np
 from odds.utils import IMPLEMENTED_KERNEL_FUNCTIONS, IMPLEMENTED_BANDWIDTH_ESTIMATORS
 from odds.utils import MomentsMatrix
-from odds.utils import SDEM_, IMPLEMENTED_SS_SCORING_FUNCTIONS
+from odds.utils import SDEM, IMPLEMENTED_SS_SCORING_FUNCTIONS
 from math import comb
 
 
@@ -162,7 +162,7 @@ class SmartSifter(BaseDetector):
         assert scoring_function in IMPLEMENTED_SS_SCORING_FUNCTIONS.keys()
         self.r = r
         self.alpha = alpha
-        self.sdem = SDEM_(r, alpha, n_components=k)
+        self.sdem = SDEM(r, alpha, n_components=k)
         self.scoring_function_str = scoring_function
         self.scoring_function = IMPLEMENTED_SS_SCORING_FUNCTIONS[scoring_function]
         self.p = None

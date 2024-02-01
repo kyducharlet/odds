@@ -11,8 +11,7 @@ from pympler import asizeof
 import time
 import matplotlib.pyplot as plt
 from sklearn.metrics import auc
-from sklearn.base import clone
-from smartsifter import SDEM
+from smartsifter import SDEM as SmartSifterSDEM
 import warnings
 
 
@@ -64,7 +63,7 @@ IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
 def neighbours_count(x, okc, bsi, bdsi, ws, ss, R):
     B = 1 / np.diagonal(bsi)
     return (ws / ss) * 0.75 ** len(x) * bdsi * np.sum([
-        np.product((np.minimum(x + R, kc + B) - np.maximum(x - R, kc - B)) - (1 / 3) * np.dot(np.square(bsi), np.power(np.minimum(x + R, kc + B) - kc, 3) - np.power(np.maximum(x - R, kc - B) - kc, 3)))
+        np.prod((np.minimum(x + R, kc + B) - np.maximum(x - R, kc - B)) - (1 / 3) * np.dot(np.square(bsi), np.power(np.minimum(x + R, kc + B) - kc, 3) - np.power(np.maximum(x - R, kc - B) - kc, 3)))
         for kc in okc
     ])
 
@@ -86,12 +85,12 @@ def neighbours_counts_in_grid(x, kcs, bsi, bdsi, ws, ss, m, r):
 """ SmartSifter: SDEM with copy """
 
 
-class SDEM_(SDEM):
+class SDEM(SmartSifterSDEM):
     def __init__(self, r, alpha, **kwargs):
         super().__init__(r, alpha, **kwargs)
 
     def copy(self):
-        sdem_bis = SDEM_(self.r, self.alpha)
+        sdem_bis = SDEM(self.r, self.alpha)
         if self.__dict__.get("converged_") is not None:
             sdem_bis.converged_ = self.converged_
         sdem_bis.covariance_type = self.covariance_type
@@ -145,14 +144,7 @@ def logarithmic_loss(x, sdem: SDEM):
 def hellinger_score(x, sdem: SDEM):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     """ We first need to clone the model and its parameters to be able to compute score even without updating """
-    sdem_clone = clone(sdem)
-    sdem_clone.covariances_ = sdem.covariances_
-    sdem_clone.covariances_bar = sdem.covariances_bar
-    sdem_clone.means_ = sdem.means_
-    sdem_clone.means_bar = sdem.means_bar
-    sdem_clone.precisions_ = sdem.precisions_
-    sdem_clone.precisions_cholesky_ = sdem.precisions_cholesky_
-    sdem_clone.weights_ = sdem.weights_
+    sdem_clone = sdem.copy()
     old_covariances_inv = np.array([np.linalg.inv(cov) for cov in sdem.covariances_bar])
     """ Update of the clone """
     sdem_clone.update(x)
@@ -404,7 +396,7 @@ class PolynomialsBasis:
     def apply_combinations(x, m, basis_func):
         assert type(m) == list
         result = basis_func(x, m)
-        return np.product(result, axis=1).reshape(-1, 1)
+        return np.prod(result, axis=1).reshape(-1, 1)
 
 
 """ DBOECF & MDEFECF: Calcul dynamique de R """
@@ -634,7 +626,7 @@ def precision(y_score, score_outliers, threshold):
 def roc_and_pr_curves(y_true, y_score):
     score_outliers = y_score[y_true == -1]
     score_inliers = y_score[y_true != -1]
-    thresholds = np.concatenate(([np.min(y_score)], np.unique(score_outliers), [np.max(y_score)]))
+    thresholds = np.concatenate((np.array([np.min(y_score)]), np.unique(score_outliers), [np.max(y_score)]))
     tpr = np.array([len(score_outliers[score_outliers < s]) / len(score_outliers) for s in thresholds])
     fpr = np.array([len(score_inliers[score_inliers < s]) / len(score_inliers) for s in thresholds])
     prec = np.array([len(score_outliers[score_outliers < s]) / len(y_score[y_score < s]) if len(y_score[y_score < s]) != 0 else np.nan for s in thresholds])
@@ -652,7 +644,21 @@ def supervised_metrics(y_true, y_pred):
     return recall, specificity, precision, accuracy, f_score
 
 
-def em_auc_score(t, t_max, volume_support, s_unif, s_X, n_generated):
+def em_auc_score(scoring_func, samples, random_generator, n_generated: int = 100000):
+    t_max = 0.9
+    lim_inf = samples.min(axis=0)
+    lim_sup = samples.max(axis=0)
+    volume_support = (lim_sup - lim_inf).prod()
+    t = np.linspace(0, 2 / (10 * volume_support), n_generated)
+    unif = random_generator.uniform(lim_inf, lim_sup,
+                             size=(1000, 2))
+    s_X = scoring_func(samples)
+    s_unif = scoring_func(unif)
+    res = em_goix(t, t_max, volume_support, s_unif, s_X, n_generated)
+    return res[2]
+
+
+def em_goix(t, t_max, volume_support: float, s_unif: np.ndarray, s_X: np.ndarray, n_generated: int):  # copied from https://github.com/ngoix/EMMV_benchmarks
     EM_t = np.zeros(t.shape[0])
     n_samples = s_X.shape[0]
     s_X_unique = np.unique(s_X)
@@ -664,12 +670,27 @@ def em_auc_score(t, t_max, volume_support, s_unif, s_X, n_generated):
                           * volume_support)
     amax = np.argmax(EM_t <= t_max) + 1
     if amax == 1:
-        print('\n failed to achieve t_max \n')
+        print("Failed to achieve t_max, values all greater than 0.9")
         amax = -1
     return t, EM_t, auc(x=t[:amax], y=EM_t[:amax]), amax
 
 
-def mv_auc_score(axis_alpha, volume_support, s_unif, s_X, n_generated):
+def mv_auc_score(scoring_func, samples, random_generator, n_generated: int = 100000):
+    alpha_min = 0.9
+    alpha_max = 0.999
+    axis_alpha = np.linspace(alpha_min, alpha_max, n_generated)
+    lim_inf = samples.min(axis=0)
+    lim_sup = samples.max(axis=0)
+    volume_support = (lim_sup - lim_inf).prod()
+    unif = random_generator.uniform(lim_inf, lim_sup,
+                             size=(1000, 2))
+    s_X = scoring_func(samples)
+    s_unif = scoring_func(unif)
+    res = mv_goix(axis_alpha, volume_support, s_unif, s_X, n_generated)
+    return res[2]
+
+
+def mv_goix(axis_alpha, volume_support: float, s_unif: np.ndarray, s_X: np.ndarray, n_generated: int): # copied from https://github.com/ngoix/EMMV_benchmarks
     n_samples = s_X.shape[0]
     s_X_argsort = s_X.argsort()
     mass = 0
