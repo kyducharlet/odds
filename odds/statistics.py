@@ -256,14 +256,14 @@ class DyCF(BaseDetector):
     C: float, optional
         define a threshold on the score when used with regularization="vu_C", usually C<=1 (default is 1)
     inv: str, optional
-        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "inv")
+        inversion method, one of "inv" for classical matrix inversion or "pinv" for Moore-Penrose pseudo-inversion (default is "pinv")
 
     Methods
     -------
     See BaseDetector methods
     """
 
-    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu_C", C: float = 1, inv: str = "inv"):
+    def __init__(self, d: int, incr_opt: str = "inverse", polynomial_basis: str = "monomials", regularization: str = "vu_C", C: float = 1, inv: str = "pinv"):
         self.N = 0  # number of points integrated in the moments matrix
         self.C = C
         self.p = None
