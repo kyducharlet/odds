@@ -287,12 +287,15 @@ class ILOF(BaseDetector):
         self.threshold = threshold
         self.win_size = win_size
         self.rst = RStarTree(k, min_size, max_size, p_reinsert_tol, reinsert_strategy)
+        self.noise = None
         self.p = None
 
     def fit(self, x):
         self.assert_shape_unfitted(x)
         self.p = x.shape[1]
         x_fit = x[-self.win_size:]
+        self.noise = 1e-5 * np.maximum(np.std(x_fit, axis=0), 1e-9)
+        x_fit = x_fit + np.random.normal(0, self.noise, x_fit.shape)
         added_objects = []
         for xx in x_fit:
             added_objects.append(self.rst.insert_data(xx.reshape(1, -1)))
@@ -304,6 +307,8 @@ class ILOF(BaseDetector):
             x_add, x_update = x[:self.win_size - len(self.rst.objects)], x[self.win_size - len(self.rst.objects):]
         else:
             x_add, x_update = x[:0], x[0:]
+        x_add = x_add + np.random.normal(0, self.noise, x_add.shape)
+        x_update = x_update + np.random.normal(0, self.noise, x_update.shape)
         objects = []
         for xx in x_add:
             obj = self.rst.insert_data(xx.reshape(1, -1))
@@ -319,8 +324,9 @@ class ILOF(BaseDetector):
 
     def score_samples(self, x):
         self.assert_shape_fitted(x)
+        x_ = x + np.random.normal(0, self.noise, x.shape)
         lof_scores = []
-        for xx in x:
+        for xx in x_:
             kNNs = self.rst.search_kNN(xx.reshape(1, -1))
             rds = [max(np.linalg.norm(xx.reshape(1, -1) - o.low), o.__dict__["__k_dist__"]) for o in kNNs]
             lrd = 1 / np.mean(rds)
@@ -488,6 +494,7 @@ class ILOF(BaseDetector):
         ilof_bis = ILOF(self.k, self.threshold, self.win_size)
         ilof_bis.rst = self.rst.copy()
         ilof_bis.p = self.p
+        ilof_bis.noise = self.noise
         return ilof_bis
 
     def method_name(self):
