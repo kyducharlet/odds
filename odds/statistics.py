@@ -449,7 +449,7 @@ class DyCG(BaseDetector):
     See BaseDetector methods
     """
 
-    def __init__(self, degrees: np.ndarray = np.array([2, 8]), **dycf_kwargs):
+    def __init__(self, degrees: np.ndarray = np.array([2, 6]), **dycf_kwargs):
         assert len(degrees) > 1
         self.degrees = degrees
         self.models = [DyCF(d=d, **dycf_kwargs) for d in self.degrees]
