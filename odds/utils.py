@@ -90,14 +90,20 @@ class SDEM(SmartSifterSDEM):
     def __init__(self, r, alpha, **kwargs):
         super().__init__(r, alpha, **kwargs)
 
+    def fit(self, X, y=None):
+        super().fit(X, y)
+        self.covariances_bar = np.array([(self.covariances_[i] + self.means_[i].reshape(-1, 1) @ self.means_[i].reshape(1, -1)) * self.weights_[i] for i in range(self.n_components)])
+        self.means_bar = np.array([self.means_[i] * self.weights_[i] for i in range(self.n_components)])
+        return self
+
     def copy(self):
         sdem_bis = SDEM(self.r, self.alpha)
         if self.__dict__.get("converged_") is not None:
             sdem_bis.converged_ = self.converged_
         sdem_bis.covariance_type = self.covariance_type
-        if self.__dict__.get("convariances_") is not None:
+        if self.__dict__.get("covariances_") is not None:
             sdem_bis.covariances_ = self.covariances_
-        if self.__dict__.get("convariances_bar") is not None:
+        if self.__dict__.get("covariances_bar") is not None:
             sdem_bis.covariances_bar = self.covariances_bar
         sdem_bis.init_params = self.init_params
         if self.__dict__.get("lower_bound_") is not None:
