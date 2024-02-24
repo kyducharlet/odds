@@ -22,8 +22,17 @@ inds_cache = {}
 """ KDE: Kernel functions """
 
 
+"""def gaussian_kernel(x, kc, bsi, bdsi):
+    return bdsi * np.exp(-1 * np.diagonal(((x - kc) @ bsi @ bsi @ (x - kc).T)) / 2) / np.power(2 * np.pi, kc.shape[1] / 2)"""
+
+
 def gaussian_kernel(x, kc, bsi, bdsi):
-    return np.sqrt(bdsi) * np.exp(-1 * np.diagonal(((x - kc) @ bsi @ (x - kc).T)) / 2) / np.power(np.sqrt(2 * np.pi), kc.shape[1] / 2)
+    x_ = (x - kc) @ bsi
+    return bdsi * np.array([gaussian_kernel_simple(point.reshape(1, -1)) for point in x_])
+
+
+def gaussian_kernel_simple(x):
+    return np.exp(-1 * np.dot(x, x.T)[0, 0] / 2) / np.power(np.sqrt(2 * np.pi), x.shape[1])
 
 
 def epanechnikov_kernel(x, kc, bsi, bdsi):
@@ -45,20 +54,12 @@ def scott_rule(x):
     return np.diag(1 / ev), np.prod(1 / ev)
 
 
-def scott_rule_with_R(x):
-    im, imd = scott_rule(x)
-    ev = 1 / np.diagonal(im)
-    R = 0.5 * np.linalg.norm(ev) / np.sqrt(x.shape[1])
-    return R, im, imd
-
-
 IMPLEMENTED_BANDWIDTH_ESTIMATORS = {
     "scott": scott_rule,
-    "scott_with_R": scott_rule_with_R,
 }
 
 
-""" DBOKDE / MDEFKDE : Estimation du nombre de voisins dans un certain rayon """
+""" DBOKDE : Estimating neighbor's count """
 
 
 def neighbours_count(x, okc, bsi, bdsi, ws, ss, R):
@@ -67,20 +68,6 @@ def neighbours_count(x, okc, bsi, bdsi, ws, ss, R):
         np.prod((np.minimum(x + R, kc + B) - np.maximum(x - R, kc - B)) - (1 / 3) * np.dot(np.square(bsi), np.power(np.minimum(x + R, kc + B) - kc, 3) - np.power(np.maximum(x - R, kc - B) - kc, 3)))
         for kc in okc
     ])
-
-
-""" MDEFKDE : Estimation du nombre de voisins dans les cellules d'une grille """
-
-
-def neighbours_counts_in_grid(x, kcs, bsi, bdsi, ws, ss, m, r):
-    cells = itertools.product(*[range(2 ** m) for i in range(len(x))])
-    start = x - (2 ** m - 1) * r
-    counts = []
-    for cell in cells:
-        center = start + 2 * np.array(cell) * r
-        overlapping_kc = [kc for kc in kcs if (np.abs(kc - center) < (1 / np.diagonal(bsi)) + r).all()]
-        counts.append(neighbours_count(center, overlapping_kc, bsi, bdsi, ws, ss, r))
-    return np.array(counts)
 
 
 """ SmartSifter: SDEM with copy """
@@ -148,32 +135,9 @@ def logarithmic_loss(x, sdem: SDEM):
     return -1 * sdem.score_samples(x)
 
 
-def hellinger_score(x, sdem: SDEM):
-    warnings.filterwarnings("ignore", category=RuntimeWarning)
-    """ We first need to clone the model and its parameters to be able to compute score even without updating """
-    sdem_clone = sdem.copy()
-    old_covariances_inv = np.array([np.linalg.inv(cov) for cov in sdem.covariances_bar])
-    """ Update of the clone """
-    sdem_clone.update(x)
-    new_covariances_inv = np.array([np.linalg.inv(cov) for cov in sdem_clone.covariances_bar])
-    """ Score computation """
-    res = np.square(np.sqrt(sdem_clone.weights_) - np.sqrt(sdem.weights_))
-    mean_weights = np.mean(np.concatenate([sdem_clone.weights_.reshape(1, -1), sdem.weights_.reshape(1, -1)], axis=0), axis=0)
-    dist_elts = []
-    for i in range(len(sdem.weights_)):
-        a = 2 / (np.sqrt(np.linalg.det((new_covariances_inv[i] + old_covariances_inv[i]) / 2)) * np.power(np.linalg.det(sdem_clone.covariances_bar[i]) * np.linalg.det(sdem.covariances_bar[i]), 1/4))
-        b = np.dot(new_covariances_inv[i], sdem_clone.means_bar[i].reshape(-1, 1)) + np.dot(old_covariances_inv[i], sdem.means_bar[i].reshape(-1, 1))
-        c = np.linalg.inv(new_covariances_inv[i] + old_covariances_inv[i])
-        d = np.dot(np.dot(sdem_clone.means_bar[i].reshape(1, -1), new_covariances_inv[i]), sdem_clone.means_bar[i].reshape(-1, 1)) + np.dot(np.dot(sdem.means_bar[i].reshape(1, -1), old_covariances_inv[i]), sdem.means_bar[i].reshape(-1, 1))
-        dist_elts.append(2 - a * np.exp(np.dot(np.dot(b.T, c), b) / 2) * np.exp(d / 2))
-    res += np.dot(mean_weights.reshape(-1), np.array(dist_elts).reshape(-1))
-    return np.sum(res), [sdem_clone.covariances_, sdem_clone.covariances_bar, sdem_clone.means_, sdem_clone.means_bar, sdem_clone.precisions_, sdem_clone.precisions_cholesky_, sdem_clone.weights_]
-
-
 IMPLEMENTED_SS_SCORING_FUNCTIONS = {
     "likelihood": likelihood,
     "logloss": logarithmic_loss,
-    "hellinger": hellinger_score,
 }
 
 
@@ -404,21 +368,6 @@ class PolynomialsBasis:
         assert type(m) == list
         result = basis_func(x, m)
         return np.prod(result, axis=1).reshape(-1, 1)
-
-
-""" DBOECF & MDEFECF: Calcul dynamique de R """
-
-
-def update_params(old_mean, old_std, new_point, N):
-    new_mean = ((N - 1) / N) * old_mean + (1 / N) * new_point
-    new_std = ((N - 1) / N) * (old_std + (1 / N) * np.square(new_point - old_mean))
-    return new_mean, new_std
-
-
-def compute_R(std, N, p):
-    ev = np.sqrt(5) * np.maximum(std, 1e-32 * np.ones(p)) / np.power(N, 1 / (p + 4))
-    R = 0.5 * np.linalg.norm(ev) / np.sqrt(p)
-    return R
 
 
 """ ILOF: Object of R*-tree """
