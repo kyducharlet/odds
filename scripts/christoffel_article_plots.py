@@ -9,7 +9,6 @@ if __name__ == "__main__":
     df_full = pd.DataFrame()
     for expe in experiments:
         df = pd.read_csv(f"results_{expe}_experiment.csv", index_col=0)
-        df = df.rename(columns={"Méthode": "Method", "Jeu": "Dataset", "Durée": "Duration", "Taille": "Size"})
         df = df.set_index(["Method", "Dataset", "Index"]).stack().reset_index().rename(columns={"level_3": "Metric", 0: "Value"})
         df_table = pd.DataFrame(columns=df["Method"].unique())
         df_full = pd.concat([df_full, df])
